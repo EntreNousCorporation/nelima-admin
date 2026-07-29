@@ -58,7 +58,11 @@ async function submit() {
                 establishment: {
                     name: form.name,
                     webSite: form.webSite || undefined,
-                    isPrimary: false,
+                    // Un partenaire créé ici est un établissement principal. Les antennes d'un
+                    // même réseau se créeront rattachées à lui par `parent`. La liste filtre par
+                    // défaut sur les principaux : un partenaire marqué non principal
+                    // n'apparaîtrait nulle part.
+                    isPrimary: true,
                     contacts: [{ value: form.contactEmail, type: 'EMAIL', isPrimary: true }],
                 },
             },
