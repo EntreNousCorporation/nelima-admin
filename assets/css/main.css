@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --nelima-primary: #25804f;
+    --nelima-surface: #ffffff;
+    --nelima-text: #14281f;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --nelima-surface: #101614;
+        --nelima-text: #e7efea;
+    }
+}
+
+body {
+    background-color: var(--nelima-surface);
+    color: var(--nelima-text);
+}
