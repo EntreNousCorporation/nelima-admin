@@ -85,86 +85,86 @@ onMounted(load);
 
 <template>
     <div>
-        <div class="flex items-start justify-between gap-4 flex-wrap">
+        <div class="page-header">
             <div>
-                <h1 class="text-2xl font-semibold">Établissements partenaires</h1>
+                <h1 class="page-title">Établissements partenaires</h1>
                 <p class="mt-1 opacity-70 max-w-2xl">
                     Créer un partenaire génère son établissement et son compte de direction, puis
                     lui envoie un email contenant le lien de définition de son mot de passe. Il se
                     connecte ensuite sur le portail établissement.
                 </p>
             </div>
-            <button class="rounded bg-nelima-600 px-4 py-2 text-white" @click="showForm = !showForm">
+            <button class="btn-primary" @click="showForm = !showForm">
                 {{ showForm ? 'Annuler' : 'Nouveau partenaire' }}
             </button>
         </div>
 
-        <p v-if="created" class="mt-4 text-sm text-nelima-600">{{ created }}</p>
+        <p v-if="created" class="alert-success mt-4">{{ created }}</p>
 
-        <form v-if="showForm" class="mt-6 rounded border border-black/10 dark:border-white/15 p-4"
+        <form v-if="showForm" class="card-pad mt-6"
               @submit.prevent="submit">
-            <h2 class="font-medium mb-4">Nouvel établissement partenaire</h2>
+            <h2 class="section-title">Nouvel établissement partenaire</h2>
 
             <p class="text-sm opacity-70 mb-3">Établissement</p>
             <div class="grid gap-4 sm:grid-cols-2">
-                <label class="text-sm">Nom
+                <label class="field-label">Nom
                     <input v-model="form.name" type="text" required placeholder="Groupe Scolaire…"
-                           class="mt-1 w-full rounded border border-black/20 dark:border-white/20 bg-transparent px-3 py-2" />
+                           class="input mt-1" />
                 </label>
-                <label class="text-sm">Email de contact
+                <label class="field-label">Email de contact
                     <input v-model="form.contactEmail" type="email" required
-                           class="mt-1 w-full rounded border border-black/20 dark:border-white/20 bg-transparent px-3 py-2" />
+                           class="input mt-1" />
                 </label>
                 <label class="text-sm sm:col-span-2">Site web (facultatif)
                     <input v-model="form.webSite" type="url" placeholder="https://…"
-                           class="mt-1 w-full rounded border border-black/20 dark:border-white/20 bg-transparent px-3 py-2" />
+                           class="input mt-1" />
                 </label>
             </div>
 
             <p class="text-sm opacity-70 mt-6 mb-3">Compte de direction</p>
             <div class="grid gap-4 sm:grid-cols-3">
-                <label class="text-sm">Prénom
+                <label class="field-label">Prénom
                     <input v-model="form.firstName" type="text" required
-                           class="mt-1 w-full rounded border border-black/20 dark:border-white/20 bg-transparent px-3 py-2" />
+                           class="input mt-1" />
                 </label>
-                <label class="text-sm">Nom
+                <label class="field-label">Nom
                     <input v-model="form.lastName" type="text" required
-                           class="mt-1 w-full rounded border border-black/20 dark:border-white/20 bg-transparent px-3 py-2" />
+                           class="input mt-1" />
                 </label>
-                <label class="text-sm">Email de connexion
+                <label class="field-label">Email de connexion
                     <input v-model="form.userEmail" type="email" required
-                           class="mt-1 w-full rounded border border-black/20 dark:border-white/20 bg-transparent px-3 py-2" />
+                           class="input mt-1" />
                 </label>
             </div>
 
-            <p v-if="formError" class="mt-4 text-sm text-red-600" role="alert">{{ formError }}</p>
+            <p v-if="formError" class="alert-danger mt-4" role="alert">{{ formError }}</p>
 
             <button type="submit" :disabled="saving || !complete"
-                    class="mt-4 rounded bg-nelima-600 px-4 py-2 text-white disabled:opacity-50">
+                    class="btn-primary mt-4">
                 {{ saving ? 'Création…' : 'Créer le partenaire' }}
             </button>
         </form>
 
-        <p v-if="error" class="mt-4 text-sm text-red-600" role="alert">{{ error }}</p>
+        <p v-if="error" class="alert-danger mt-4" role="alert">{{ error }}</p>
 
         <div class="mt-6 overflow-x-auto">
-            <table class="w-full text-sm border-collapse">
+            <table class="table">
                 <thead>
-                    <tr class="text-left border-b border-black/10 dark:border-white/15">
-                        <th class="py-2 pr-4 font-medium">Établissement</th>
-                        <th class="py-2 pr-4 font-medium">Site web</th>
-                        <th class="py-2 pr-4 font-medium">État</th>
+                    <tr>
+                        <th>Établissement</th>
+                        <th>Site web</th>
+                        <th>État</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-if="loading"><td colspan="3" class="py-6 opacity-70">Chargement…</td></tr>
+                    <tr v-if="loading"><td colspan="3" class="py-8 text-center" style="color: var(--text-muted)">Chargement…</td></tr>
                     <tr v-else-if="!rows.length">
-                        <td colspan="3" class="py-6 opacity-70">Aucun établissement partenaire.</td>
+                        <td colspan="3" class="py-8 text-center" style="color: var(--text-muted)">Aucun établissement partenaire.</td>
                     </tr>
-                    <tr v-for="row in rows" :key="row.id" class="border-b border-black/5 dark:border-white/10">
-                        <td class="py-2 pr-4">{{ row.name }}</td>
-                        <td class="py-2 pr-4">{{ row.webSite || '—' }}</td>
-                        <td class="py-2 pr-4">{{ row.active === false ? 'Inactif' : 'Actif' }}</td>
+                    <tr v-for="row in rows" :key="row.id" >
+                        <td>{{ row.name }}</td>
+                        <td>{{ row.webSite || '—' }}</td>
+                        <td>{{ row.active === false ? 'Inactif' : 'Actif' }}</td>
                     </tr>
                 </tbody>
             </table>

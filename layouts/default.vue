@@ -4,10 +4,23 @@ import { useAuthStore } from '~/stores/auth';
 const auth = useAuthStore();
 const route = useRoute();
 
+/**
+ * Le back-office reprend la coquille du portail établissement, à une différence près : la mention
+ * « YPYit » sous la marque. Les deux applications se ressemblent au point d'être confondues, et un
+ * administrateur doit voir sans hésiter laquelle il manipule — il agit ici sur toutes les écoles à
+ * la fois.
+ */
 const navigation = [
-    { label: 'Établissements', to: '/app' },
-    { label: 'Paiement', to: '/app/paiement' },
+    { label: 'Établissements', to: '/app', icon: 'M4 20V9l8-5 8 5v11M9 20v-6h6v6' },
+    { label: 'Paiement', to: '/app/paiement', icon: 'M3 8h18v10H3zM3 8l2-4h14l2 4M8 13h8' },
 ];
+
+const initials = computed(() => (auth.fullName ?? '')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part: string) => part[0]?.toUpperCase())
+    .join('') || '—');
 
 async function logout() {
     await $fetch('/api/auth/logout', { method: 'POST' });
@@ -18,26 +31,63 @@ async function logout() {
 
 <template>
     <div v-if="auth.isAuthenticated" class="min-h-screen flex">
-        <aside class="w-60 shrink-0 border-r border-black/10 dark:border-white/10 p-4 flex flex-col">
-            <div class="mb-6">
-                <p class="text-lg font-semibold">Nelima</p>
-                <p class="text-sm opacity-70">Back-office YPYit</p>
+        <aside
+            class="w-64 shrink-0 flex flex-col"
+            style="background-color: var(--surface-raised); border-right: 1px solid var(--border)"
+        >
+            <div class="px-5 py-5 flex items-center gap-3">
+                <NelimaMark :size="32" />
+                <div class="min-w-0">
+                    <p class="text-sm font-semibold leading-tight">Nelima</p>
+                    <p class="text-xs" style="color: var(--text-muted)">Back-office YPYit</p>
+                </div>
             </div>
-            <nav class="flex-1 space-y-1">
-                <NuxtLink v-for="item in navigation" :key="item.to" :to="item.to"
-                          class="block rounded px-3 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/10"
-                          :class="route.path === item.to ? 'bg-black/5 dark:bg-white/10 font-medium' : ''">
+
+            <nav class="flex-1 px-3 pb-4 space-y-1 overflow-y-auto">
+                <NuxtLink
+                    v-for="item in navigation"
+                    :key="item.to"
+                    :to="item.to"
+                    class="nav-link"
+                    :class="route.path === item.to ? 'nav-link-active' : ''"
+                >
+                    <svg
+                        class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="1.8"
+                        stroke-linecap="round" stroke-linejoin="round"
+                    >
+                        <path :d="item.icon" />
+                    </svg>
                     {{ item.label }}
                 </NuxtLink>
             </nav>
-            <div class="pt-4 border-t border-black/10 dark:border-white/10">
-                <p class="text-sm font-medium">{{ auth.fullName }}</p>
-                <button class="mt-2 text-sm underline opacity-70 hover:opacity-100" @click="logout">
+
+            <div class="px-3 py-4" style="border-top: 1px solid var(--border)">
+                <div class="flex items-center gap-3 px-2">
+                    <span
+                        class="w-8 h-8 shrink-0 rounded-full grid place-items-center text-xs font-semibold"
+                        style="background-color: var(--brand-50); color: var(--brand-700)"
+                    >{{ initials }}</span>
+                    <p class="text-sm font-medium truncate">{{ auth.fullName }}</p>
+                </div>
+                <button class="btn-ghost btn-sm w-full mt-2 justify-start" @click="logout">
+                    <svg
+                        class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                    >
+                        <path d="M15 17l5-5-5-5M20 12H9M12 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6" />
+                    </svg>
                     Se déconnecter
                 </button>
             </div>
         </aside>
-        <main class="flex-1 p-8 overflow-x-auto"><slot /></main>
+
+        <main class="flex-1 min-w-0 overflow-x-auto">
+            <div class="max-w-[1400px] px-8 py-7">
+                <slot />
+            </div>
+        </main>
     </div>
+
     <div v-else class="min-h-screen"><slot /></div>
 </template>

@@ -29,37 +29,66 @@ async function submit() {
 </script>
 
 <template>
-    <div class="min-h-screen flex items-center justify-center p-6">
-        <form class="w-full max-w-sm space-y-4" @submit.prevent="submit">
-            <div class="mb-8">
-                <h1 class="text-2xl font-semibold">Nelima</h1>
-                <p class="opacity-70">Back-office YPYit</p>
+    <div class="min-h-screen grid lg:grid-cols-2">
+        <aside
+            class="hidden lg:flex flex-col justify-between p-12 text-white"
+            style="background: linear-gradient(150deg, #131a2e 0%, #0a0f1d 100%)"
+        >
+            <div class="flex items-center gap-3">
+                <NelimaMark :size="36" />
+                <span class="text-lg font-semibold tracking-tight">Nelima</span>
             </div>
 
-            <div class="space-y-1">
-                <label for="username" class="text-sm">Identifiant</label>
-                <input
-                    id="username" v-model="username" type="text" autocomplete="username" required
-                    class="w-full rounded border border-black/20 dark:border-white/20 bg-transparent px-3 py-2"
-                />
+            <div class="max-w-md">
+                <p class="text-3xl font-semibold leading-tight tracking-tight">
+                    Administration de la plateforme.
+                </p>
+                <p class="mt-4 text-white/60 leading-relaxed">
+                    Établissements partenaires, comptes de direction et configuration de
+                    l'agrégateur de paiement.
+                </p>
             </div>
 
-            <div class="space-y-1">
-                <label for="password" class="text-sm">Mot de passe</label>
-                <input
-                    id="password" v-model="password" type="password" autocomplete="current-password" required
-                    class="w-full rounded border border-black/20 dark:border-white/20 bg-transparent px-3 py-2"
-                />
-            </div>
+            <p class="text-sm text-white/40">Réservé à l'équipe YPYit</p>
+        </aside>
 
-            <p v-if="error" class="text-sm text-red-600" role="alert">{{ error }}</p>
+        <main class="flex items-center justify-center p-6">
+            <form class="w-full max-w-sm" @submit.prevent="submit">
+                <div class="lg:hidden flex items-center gap-3 mb-8">
+                    <NelimaMark :size="32" />
+                    <span class="text-lg font-semibold">Nelima</span>
+                </div>
 
-            <button
-                type="submit" :disabled="submitting || !username || !password"
-                class="w-full rounded bg-nelima-600 px-4 py-2 text-white disabled:opacity-50"
-            >
-                {{ submitting ? 'Connexion…' : 'Se connecter' }}
-            </button>
-        </form>
+                <h1 class="text-2xl font-semibold tracking-tight">Back-office</h1>
+                <p class="page-subtitle mb-8">Accès réservé à l'équipe YPYit.</p>
+
+                <div class="space-y-4">
+                    <div>
+                        <label for="username" class="field-label">Identifiant</label>
+                        <input
+                            id="username" v-model="username" type="text"
+                            autocomplete="username" required class="input"
+                        />
+                    </div>
+
+                    <div>
+                        <label for="password" class="field-label">Mot de passe</label>
+                        <input
+                            id="password" v-model="password" type="password"
+                            autocomplete="current-password" required class="input"
+                        />
+                    </div>
+
+                    <p v-if="error" class="alert-danger" role="alert">{{ error }}</p>
+
+                    <button
+                        type="submit" :disabled="submitting || !username || !password"
+                        class="btn-primary w-full"
+                    >
+                        {{ submitting ? 'Connexion…' : 'Se connecter' }}
+                    </button>
+                </div>
+            </form>
+        </main>
     </div>
 </template>

@@ -2,20 +2,335 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Jetons de l'interface Nelima.
+ *
+ * Une seule source pour les couleurs, exprimée en variables CSS : les classes y puisent, et le mode
+ * sombre se contente de réécrire les variables. Dupliquer la palette entre CSS et configuration
+ * Tailwind garantirait qu'un jour l'une dise bleu et l'autre gris.
+ */
 :root {
-    --nelima-primary: #25804f;
-    --nelima-surface: #ffffff;
-    --nelima-text: #14281f;
+    color-scheme: light;
+
+    /* Bleu de marque. Le 600 porte les actions ; le blanc dessus atteint un contraste de 7,7:1. */
+    --brand-50: #eff4ff;
+    --brand-100: #dbe6fe;
+    --brand-200: #bfd3fe;
+    --brand-300: #93b4fd;
+    --brand-500: #3b66f6;
+    --brand-600: #2547eb;
+    --brand-700: #1d37d8;
+    --brand-900: #1e2f8a;
+
+    /* Surfaces : le fond n'est pas blanc, les cartes le sont. C'est ce décalage qui les détache. */
+    --surface: #f6f8fc;
+    --surface-raised: #ffffff;
+    --surface-sunken: #eef2f9;
+    --border: #dde4f0;
+    --border-strong: #c3cfe3;
+
+    --text: #101828;
+    --text-muted: #5a6a85;
+    --text-faint: #8494ad;
+
+    /* Couleurs de sens, réservées aux états : jamais employées pour décorer. */
+    --success: #0f7a4a;
+    --success-soft: #e6f5ee;
+    --warning: #a35b00;
+    --warning-soft: #fdf0dd;
+    --danger: #b42318;
+    --danger-soft: #fdeceb;
+
+    --radius: 10px;
+    --radius-lg: 14px;
+    --shadow-card: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .04);
 }
 
 @media (prefers-color-scheme: dark) {
     :root {
-        --nelima-surface: #101614;
-        --nelima-text: #e7efea;
+        color-scheme: dark;
+
+        --surface: #0d1117;
+        --surface-raised: #151b24;
+        --surface-sunken: #10161e;
+        --border: #232c39;
+        --border-strong: #33404f;
+
+        --text: #e8edf5;
+        --text-muted: #9aa8bd;
+        --text-faint: #6f7f96;
+
+        --success: #4ac48b;
+        --success-soft: #10281f;
+        --warning: #e3a34a;
+        --warning-soft: #2a1f0f;
+        --danger: #f2837a;
+        --danger-soft: #2a1512;
+
+        --shadow-card: 0 1px 2px rgba(0, 0, 0, .4);
     }
 }
 
-body {
-    background-color: var(--nelima-surface);
-    color: var(--nelima-text);
+@layer base {
+    html {
+        font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    }
+
+    body {
+        background-color: var(--surface);
+        color: var(--text);
+        -webkit-font-smoothing: antialiased;
+    }
+
+    h1, h2, h3 {
+        letter-spacing: -0.015em;
+    }
+}
+
+@layer components {
+    /* ---- Structure de page ---- */
+    .page-header {
+        @apply flex flex-wrap items-start justify-between gap-4 mb-6;
+    }
+
+    .page-title {
+        @apply text-2xl font-semibold;
+        color: var(--text);
+    }
+
+    .page-subtitle {
+        @apply text-sm mt-1;
+        color: var(--text-muted);
+    }
+
+    .section-title {
+        @apply text-sm font-semibold mb-3;
+        color: var(--text);
+    }
+
+    /* ---- Surfaces ---- */
+    .card {
+        background-color: var(--surface-raised);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-card);
+    }
+
+    .card-pad {
+        @apply card p-5;
+    }
+
+    /* ---- Indicateurs ---- */
+    .stat {
+        @apply card p-4 flex flex-col gap-1;
+    }
+
+    .stat-label {
+        @apply text-xs font-medium uppercase tracking-wide;
+        color: var(--text-faint);
+    }
+
+    .stat-value {
+        @apply text-2xl font-semibold tabular-nums;
+        color: var(--text);
+    }
+
+    .stat-hint {
+        @apply text-xs;
+        color: var(--text-muted);
+    }
+
+    /* ---- Tableaux ---- */
+    .table-wrap {
+        /* `overflow-x-auto` et non `hidden` : sur un écran étroit, un tableau de sept colonnes
+           doit pouvoir défiler plutôt que d'être tronqué. */
+        @apply card overflow-x-auto;
+    }
+
+    .table {
+        @apply w-full text-sm;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    .table thead th {
+        @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide;
+        color: var(--text-faint);
+        background-color: var(--surface-sunken);
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+    }
+
+    .table tbody td {
+        @apply px-4 py-3 align-middle;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .table tbody tr:last-child td {
+        border-bottom: 0;
+    }
+
+    .table tbody tr:hover td {
+        background-color: var(--surface-sunken);
+    }
+
+    /* Montants alignés à droite et en chasse fixe : c'est ce qui rend une colonne de nombres
+       comparable d'une ligne à l'autre. */
+    .num {
+        @apply text-right tabular-nums font-medium;
+        white-space: nowrap;
+    }
+
+    /* ---- Boutons ---- */
+    .btn {
+        @apply inline-flex items-center justify-center gap-2 px-4 h-10 text-sm font-medium
+               transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+        border-radius: var(--radius);
+    }
+
+    .btn-primary {
+        @apply btn text-white;
+        background-color: var(--brand-600);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+        background-color: var(--brand-700);
+    }
+
+    .btn-secondary {
+        @apply btn;
+        background-color: var(--surface-raised);
+        color: var(--text);
+        border: 1px solid var(--border-strong);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+        background-color: var(--surface-sunken);
+    }
+
+    .btn-ghost {
+        @apply btn;
+        color: var(--text-muted);
+    }
+
+    .btn-ghost:hover:not(:disabled) {
+        background-color: var(--surface-sunken);
+        color: var(--text);
+    }
+
+    .btn-sm {
+        @apply h-8 px-3 text-xs;
+    }
+
+    /* ---- Saisie ---- */
+    .field-label {
+        @apply block text-sm font-medium mb-1.5;
+        color: var(--text);
+    }
+
+    .input,
+    .select {
+        @apply w-full h-10 px-3 text-sm outline-none transition-shadow;
+        background-color: var(--surface-raised);
+        color: var(--text);
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius);
+    }
+
+    .select {
+        /* Le sélecteur natif ignore la plupart des styles : la flèche est reprise à la main pour
+           qu'il ne détonne pas au milieu de champs dessinés. */
+        @apply appearance-none pr-9;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M5.5 7.5l4.5 4.5 4.5-4.5' stroke='%235a6a85' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.6rem center;
+        background-size: 1.1rem;
+    }
+
+    .input:focus,
+    .select:focus {
+        border-color: var(--brand-500);
+        box-shadow: 0 0 0 3px var(--brand-100);
+    }
+
+    .input::placeholder {
+        color: var(--text-faint);
+    }
+
+    /* ---- Étiquettes d'état ---- */
+    .badge {
+        @apply inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded-full;
+    }
+
+    .badge-success {
+        background-color: var(--success-soft);
+        color: var(--success);
+    }
+
+    .badge-warning {
+        background-color: var(--warning-soft);
+        color: var(--warning);
+    }
+
+    .badge-danger {
+        background-color: var(--danger-soft);
+        color: var(--danger);
+    }
+
+    .badge-neutral {
+        background-color: var(--surface-sunken);
+        color: var(--text-muted);
+    }
+
+    /* ---- Vides et erreurs ---- */
+    .empty {
+        @apply flex flex-col items-center justify-center text-center gap-1.5 py-14 px-6;
+    }
+
+    .empty-title {
+        @apply text-sm font-medium;
+        color: var(--text);
+    }
+
+    .empty-text {
+        @apply text-sm max-w-md;
+        color: var(--text-muted);
+    }
+
+    .alert-success {
+        @apply text-sm px-3 py-2;
+        border-radius: var(--radius);
+        background-color: var(--success-soft);
+        color: var(--success);
+    }
+
+    .alert-danger {
+        @apply text-sm px-3 py-2;
+        border-radius: var(--radius);
+        background-color: var(--danger-soft);
+        color: var(--danger);
+    }
+
+    /* ---- Navigation ---- */
+    .nav-link {
+        @apply flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors;
+        color: var(--text-muted);
+    }
+
+    .nav-link:hover {
+        background-color: var(--surface-sunken);
+        color: var(--text);
+    }
+
+    .nav-link-active {
+        background-color: var(--brand-50);
+        color: var(--brand-700);
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    .nav-link-active {
+        background-color: rgba(37, 71, 235, .2);
+        color: var(--brand-300);
+    }
 }

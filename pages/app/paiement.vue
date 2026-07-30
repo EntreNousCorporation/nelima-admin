@@ -30,14 +30,14 @@ onMounted(async () => {
 
 <template>
     <div>
-        <h1 class="text-2xl font-semibold">Fournisseur de paiement</h1>
+        <h1 class="page-title">Fournisseur de paiement</h1>
         <p class="mt-1 opacity-70 max-w-2xl">
             Un seul fournisseur est actif pour toute la plateforme. Les identifiants proviennent
             des variables d'environnement du serveur et sont réappliqués à chaque démarrage : ils
             ne se modifient pas depuis cette page.
         </p>
 
-        <p v-if="error" class="mt-4 text-sm text-red-600" role="alert">{{ error }}</p>
+        <p v-if="error" class="alert-danger mt-4" role="alert">{{ error }}</p>
         <p v-if="loading" class="mt-6 opacity-70">Chargement…</p>
 
         <div v-else-if="!configs.length" class="mt-6 rounded border border-amber-500/40 bg-amber-500/10 p-4">
@@ -49,15 +49,21 @@ onMounted(async () => {
         </div>
 
         <div v-else class="mt-6 space-y-3">
-            <div v-for="config in configs" :key="config.id"
-                 class="rounded border p-4"
-                 :class="config.active ? 'border-nelima-300 bg-nelima-50 dark:bg-white/5' : 'border-black/10 dark:border-white/15'">
+            <div
+                v-for="config in configs" :key="config.id" class="card-pad"
+                :style="config.active
+                    ? 'border-color: var(--brand-300); background-color: var(--brand-50)'
+                    : ''"
+            >
                 <div class="flex items-center gap-3 flex-wrap">
                     <p class="font-medium">{{ config.providerType }}</p>
-                    <span class="text-xs rounded px-2 py-0.5 border border-black/20 dark:border-white/20">
-                        {{ config.environment }}
-                    </span>
-                    <span v-if="config.active" class="text-xs text-nelima-600 font-medium">actif</span>
+                    <!-- L'environnement est signalé, pas décoré : confondre un fournisseur d'essai
+                         avec celui de production ferait passer de vrais paiements pour des tests. -->
+                    <span
+                        class="badge"
+                        :class="config.environment === 'LIVE' ? 'badge-danger' : 'badge-neutral'"
+                    >{{ config.environment }}</span>
+                    <span v-if="config.active" class="badge badge-success">actif</span>
                 </div>
                 <p class="text-sm opacity-70 mt-1">{{ config.label }}</p>
                 <p v-if="config.settings?.default_payment_method" class="text-sm opacity-70 mt-1">
