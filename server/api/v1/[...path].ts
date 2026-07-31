@@ -66,15 +66,17 @@ export default defineEventHandler(async (event) => {
         ? undefined
         : await readRawBody(event, false);
 
-    // responseType 'text' et non 'arrayBuffer' : Nitro re-sérialiserait le binaire et le
-    // corps arriverait vide côté navigateur.
-    const response = await $fetch.raw<string>(`${config.backendUrl}/${path}`, {
+    // Toujours lu en binaire, puis décodé — ou non — selon ce que le backend annonce.
+    //
+    // Lire en `text` décodait tout binaire comme de l'UTF-8, ce qui vidait les fichiers
+    // téléchargés. Le JSON, lui, doit rester une chaîne pour arriver intact au navigateur.
+    const response = await $fetch.raw<ArrayBuffer>(`${config.backendUrl}/${path}`, {
         method: method as any,
         body: rawBody,
         query: getQuery(event) as Record<string, string>,
         headers: forwardHeaders,
         ignoreResponseError: true,
-        responseType: 'text',
+        responseType: 'arrayBuffer',
     });
 
     setResponseStatus(event, response.status);
@@ -89,5 +91,14 @@ export default defineEventHandler(async (event) => {
         await session.clear();
     }
 
-    return !response._data || response._data === '' ? null : response._data;
+    if (!response._data || response._data.byteLength === 0) {
+        return null;
+    }
+
+    const contentType = response.headers.get('content-type') ?? '';
+    const isTextual = /^(application\/(json|.*\+json|xml)|text\/)/i.test(contentType);
+
+    return isTextual
+        ? new TextDecoder('utf-8').decode(response._data)
+        : Buffer.from(response._data);
 });
