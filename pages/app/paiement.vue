@@ -15,6 +15,76 @@ const error = ref('');
 
 const active = computed(() => configs.value.find((c) => c.active));
 
+/**
+ * Taux de commission.
+ *
+ * Saisi en pourcentage à l'écran et transmis en fraction : demander « 0,02 » à un humain invite à
+ * écrire « 2 », ce que le serveur refuserait. La conversion se fait ici, une bonne fois.
+ */
+const rate = ref<number | null>(null);
+const rateDraft = ref<string>('');
+const savingRate = ref(false);
+const rateError = ref('');
+const rateSaved = ref(false);
+
+const rateChanged = computed(() => {
+    const parsed = Number(rateDraft.value.replace(',', '.'));
+    return Number.isFinite(parsed) && rate.value !== null
+        && Math.abs(parsed / 100 - rate.value) > 1e-9;
+});
+
+/**
+ * Groupage manuel plutôt que `toLocaleString` : le rendu serveur et le navigateur ne partagent pas
+ * forcément les données ICU, et l'écart produit un avertissement d'hydratation sur un texte qui doit
+ * simplement afficher un montant.
+ */
+function formatAmount(value: number) {
+    return String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
+}
+
+const example = computed(() => {
+    const parsed = Number(rateDraft.value.replace(',', '.'));
+    const rateApplied = Number.isFinite(parsed) ? parsed : 0;
+    return formatAmount(50000 + Math.round(50000 * rateApplied / 100));
+});
+
+async function loadRate() {
+    try {
+        const current = await api<{ commissionRate: number }>('/platform-settings/billing');
+        rate.value = current.commissionRate;
+        rateDraft.value = String(Math.round(current.commissionRate * 10000) / 100).replace('.', ',');
+    } catch {
+        rateError.value = "Le taux de commission n'a pas pu être lu.";
+    }
+}
+
+async function saveRate() {
+    const parsed = Number(rateDraft.value.replace(',', '.'));
+    if (!Number.isFinite(parsed)) {
+        rateError.value = 'Saisissez un pourcentage, par exemple 2 ou 2,5.';
+        return;
+    }
+
+    savingRate.value = true;
+    rateError.value = '';
+    rateSaved.value = false;
+    try {
+        const saved = await api<{ commissionRate: number }>('/platform-settings/billing', {
+            method: 'PUT',
+            body: { commissionRate: parsed / 100 },
+        });
+        rate.value = saved.commissionRate;
+        rateSaved.value = true;
+    } catch (e: any) {
+        // Le serveur borne la saisie : on reprend son message plutôt que d'en inventer un plus
+        // vague, puisque lui seul connaît les bornes qu'il applique.
+        rateError.value = e?.data?.debugMessage
+            ?? "Le taux n'a pas pu être enregistré. Vérifiez la valeur saisie.";
+    } finally {
+        savingRate.value = false;
+    }
+}
+
 onMounted(async () => {
     try {
         // Ces routes appartiennent au starter PaySwitch et ne sont pas sous /api/v1 côté
@@ -25,6 +95,7 @@ onMounted(async () => {
     } finally {
         loading.value = false;
     }
+    await loadRate();
 });
 </script>
 
@@ -36,6 +107,43 @@ onMounted(async () => {
             des variables d'environnement du serveur et sont réappliqués à chaque démarrage : ils
             ne se modifient pas depuis cette page.
         </p>
+
+        <section class="card-pad mt-6 max-w-2xl">
+            <h2 class="section-title">Commission Nelima</h2>
+            <p class="text-sm mb-4" style="color: var(--text-muted)">
+                Part prélevée sur chaque paiement en ligne, en plus du montant de la tranche. Elle
+                est annoncée au parent avant qu'il ne valide, et s'applique dès le paiement suivant
+                — aucun redéploiement n'est nécessaire. Sans effet sur les encaissements au guichet.
+            </p>
+
+            <div class="flex items-end gap-3 flex-wrap">
+                <div>
+                    <label for="rate" class="field-label">Taux appliqué</label>
+                    <div class="flex items-center gap-2">
+                        <input
+                            id="rate" v-model="rateDraft" type="text" inputmode="decimal"
+                            class="input w-28 text-right" :disabled="rate === null"
+                        />
+                        <span class="text-sm font-semibold" style="color: var(--text-muted)">%</span>
+                    </div>
+                </div>
+                <button
+                    class="btn-primary" :disabled="savingRate || !rateChanged" @click="saveRate"
+                >
+                    {{ savingRate ? 'Enregistrement…' : 'Enregistrer' }}
+                </button>
+            </div>
+
+            <!-- Exemple chiffré : un taux seul ne dit pas grand-chose, un montant si. -->
+            <p v-if="rate !== null" class="text-xs mt-3" style="color: var(--text-faint)">
+                Sur une tranche de 50 000 F, le parent réglera {{ example }} F.
+            </p>
+
+            <p v-if="rateError" class="alert-danger mt-3" role="alert">{{ rateError }}</p>
+            <p v-else-if="rateSaved" class="alert-success mt-3">
+                Taux enregistré. Il s'applique aux paiements à venir.
+            </p>
+        </section>
 
         <p v-if="error" class="alert-danger mt-4" role="alert">{{ error }}</p>
         <p v-if="loading" class="mt-6 opacity-70">Chargement…</p>
