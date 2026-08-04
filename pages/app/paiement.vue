@@ -101,19 +101,20 @@ onMounted(async () => {
 
 <template>
     <div>
-        <h1 class="page-title">Fournisseur de paiement</h1>
-        <p class="mt-1 opacity-70 max-w-2xl">
-            Un seul fournisseur est actif pour toute la plateforme. Les identifiants proviennent
-            des variables d'environnement du serveur et sont réappliqués à chaque démarrage : ils
-            ne se modifient pas depuis cette page.
-        </p>
+        <PageHead
+            title="Paiement"
+            sub="Commission de la plateforme et fournisseur d'encaissement en ligne"
+        />
 
-        <section class="card-pad mt-6 max-w-2xl">
-            <h2 class="section-title">Commission Nelima</h2>
-            <p class="text-sm mb-4" style="color: var(--text-muted)">
-                Part prélevée sur chaque paiement en ligne, en plus du montant de la tranche. Elle
-                est annoncée au parent avant qu'il ne valide, et s'applique dès le paiement suivant
-                — aucun redéploiement n'est nécessaire. Sans effet sur les encaissements au guichet.
+        <UiCard
+            class="max-w-2xl mb-3.5"
+            title="Commission Nelima"
+            sub="Part prélevée sur chaque paiement en ligne, en plus du montant de la tranche"
+        >
+            <p class="text-[12.5px] mb-4 leading-relaxed" style="color: var(--text-muted)">
+                Elle est annoncée au parent avant qu'il ne valide, et s'applique dès le paiement
+                suivant — aucun redéploiement n'est nécessaire. Sans effet sur les encaissements
+                reçus au guichet par les écoles.
             </p>
 
             <div class="flex items-end gap-3 flex-wrap">
@@ -143,51 +144,56 @@ onMounted(async () => {
             <p v-else-if="rateSaved" class="alert-success mt-3">
                 Taux enregistré. Il s'applique aux paiements à venir.
             </p>
-        </section>
+        </UiCard>
 
-        <p v-if="error" class="alert-danger mt-4" role="alert">{{ error }}</p>
-        <p v-if="loading" class="mt-6 opacity-70">Chargement…</p>
+        <p v-if="error" class="alert-danger mb-3.5" role="alert">{{ error }}</p>
 
-        <div v-else-if="!configs.length" class="mt-6 rounded border border-amber-500/40 bg-amber-500/10 p-4">
-            <p class="font-medium">Aucun fournisseur configuré</p>
-            <p class="text-sm mt-1 opacity-80">
-                Aucun paiement en ligne n'est possible. Renseigner JEKO_API_KEY, JEKO_API_KEY_ID,
-                JEKO_WEBHOOK_SECRET et JEKO_STORE_ID sur le serveur, puis redémarrer le backend.
+        <UiCard
+            class="max-w-2xl" :pad="false"
+            title="Fournisseur d'encaissement"
+            sub="Un seul est actif pour toute la plateforme"
+        >
+            <p v-if="loading" class="card-b text-[13px]" style="color: var(--text-faint)">
+                Chargement…
             </p>
-        </div>
 
-        <div v-else class="mt-6 space-y-3">
-            <div
-                v-for="config in configs" :key="config.id" class="card-pad"
-                :style="config.active
-                    ? 'border-color: var(--brand-300); background-color: var(--brand-50)'
-                    : ''"
-            >
-                <div class="flex items-center gap-3 flex-wrap">
-                    <p class="font-medium">{{ config.providerType }}</p>
+            <EmptyState
+                v-else-if="!configs.length"
+                title="Aucun fournisseur configuré"
+                text="Aucun paiement en ligne n'est possible. Renseignez JEKO_API_KEY, JEKO_API_KEY_ID, JEKO_WEBHOOK_SECRET et JEKO_STORE_ID sur le serveur, puis redémarrez le backend."
+            />
+
+            <div v-else class="lst">
+                <div v-for="config in configs" :key="config.id" class="flex items-center gap-3 flex-wrap">
+                    <b class="text-[13px] font-extrabold" style="color: var(--navy)">
+                        {{ config.providerType }}
+                    </b>
                     <!-- L'environnement est signalé, pas décoré : confondre un fournisseur d'essai
                          avec celui de production ferait passer de vrais paiements pour des tests. -->
-                    <span
-                        class="badge"
-                        :class="config.environment === 'LIVE' ? 'badge-danger' : 'badge-neutral'"
-                    >{{ config.environment }}</span>
-                    <span v-if="config.active" class="badge badge-success">actif</span>
+                    <UiPill :tone="config.environment === 'LIVE' ? 'late' : 'mute'">
+                        {{ config.environment }}
+                    </UiPill>
+                    <UiPill v-if="config.active" tone="ok">Actif</UiPill>
+                    <span class="w-full text-[12.5px]" style="color: var(--text-muted)">
+                        {{ config.label }}
+                        <template v-if="config.settings?.default_payment_method">
+                            · canal par défaut : {{ config.settings.default_payment_method }}
+                        </template>
+                    </span>
                 </div>
-                <p class="text-sm opacity-70 mt-1">{{ config.label }}</p>
-                <p v-if="config.settings?.default_payment_method" class="text-sm opacity-70 mt-1">
-                    Canal par défaut : {{ config.settings.default_payment_method }}
-                </p>
             </div>
 
-            <div v-if="active?.environment === 'LIVE'"
-                 class="rounded border border-red-500/40 bg-red-500/10 p-4 text-sm">
-                <p class="font-medium">Environnement LIVE</p>
-                <p class="mt-1 opacity-90">
+            <div
+                v-if="active?.environment === 'LIVE'" class="m-4 rounded-xl p-3.5"
+                style="background: var(--danger-soft); border: 1px solid var(--danger)"
+            >
+                <b class="text-[13px]" style="color: var(--danger)">Environnement LIVE</b>
+                <p class="text-[12.5px] mt-1 leading-relaxed" style="color: var(--text-muted)">
                     Toute initiation de paiement débite un compte réel. Vérifier qu'une transaction
                     de faible montant a bien confirmé le facteur de conversion des montants avant
                     d'ouvrir l'encaissement en ligne à un établissement.
                 </p>
             </div>
-        </div>
+        </UiCard>
     </div>
 </template>

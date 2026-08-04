@@ -12,44 +12,57 @@
 :root {
     color-scheme: light;
 
-    /* Bleu de marque. Le 600 porte les actions ; le blanc dessus atteint un contraste de 7,7:1. */
-    --brand-50: #eff4ff;
-    --brand-100: #dbe6fe;
-    --brand-200: #bfd3fe;
-    --brand-300: #93b4fd;
-    --brand-500: #3b66f6;
-    --brand-600: #2547eb;
-    --brand-700: #1d37d8;
-    --brand-900: #1e2f8a;
+    /*
+     * Palette reprise telle quelle du prototype du designer (`New Design/bo/bo.css`).
+     * Les noms restent les nôtres pour que les composants déjà écrits continuent d'y puiser ;
+     * seules les valeurs changent. Redéclarer une seconde palette à côté aurait garanti qu'un
+     * jour l'une dise bleu et l'autre gris.
+     */
+    --brand-50: #EDF5FF;
+    --brand-100: #DCEBFF;
+    --brand-200: #DCEBFF;
+    --brand-300: #7FA6E8;
+    --brand-500: #0061FF;
+    --brand-600: #0061FF;
+    --brand-700: #0344AD;
+    --brand-900: #0B2E66;
 
-    /* Surfaces : le fond n'est pas blanc, les cartes le sont. C'est ce décalage qui les détache. */
-    --surface: #f6f8fc;
+    /* Bleu nuit : barre supérieure, titres et chiffres clés. C'est lui qui donne le ton. */
+    --navy: #0B2E66;
+    --navy-deep: #081F47;
+
+    --surface: #F4F6FA;
     --surface-raised: #ffffff;
-    --surface-sunken: #eef2f9;
-    --border: #dde4f0;
-    --border-strong: #c3cfe3;
+    --surface-sunken: #F7F9FC;
+    --border: #E7EBF1;
+    --border-strong: #D7DEE8;
 
-    --text: #101828;
-    --text-muted: #5a6a85;
-    --text-faint: #8494ad;
+    --text: #17304F;
+    --text-muted: #5A6B82;
+    --text-faint: #8A99AD;
 
     /* Couleurs de sens, réservées aux états : jamais employées pour décorer. */
-    --success: #0f7a4a;
-    --success-soft: #e6f5ee;
-    --warning: #a35b00;
-    --warning-soft: #fdf0dd;
-    --danger: #b42318;
-    --danger-soft: #fdeceb;
+    --success: #12996A;
+    --success-soft: #E4F7EF;
+    --success-solid: #1FCC85;
+    --warning: #96620A;
+    --warning-soft: #FFF4E0;
+    --warning-solid: #F5A524;
+    --danger: #C4363B;
+    --danger-soft: #FDECEE;
+    --danger-solid: #E5484D;
 
-    --radius: 10px;
-    --radius-lg: 14px;
-    --shadow-card: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .04);
+    --radius: 9px;
+    --radius-lg: 12px;
+    --shadow-card: 0 1px 2px rgba(11, 46, 102, .03);
 }
 
 @media (prefers-color-scheme: dark) {
     :root {
         color-scheme: dark;
 
+        --navy: #0B2E66;
+        --navy-deep: #060f22;
         --surface: #0d1117;
         --surface-raised: #151b24;
         --surface-sunken: #10161e;
@@ -61,6 +74,9 @@
         --text-faint: #6f7f96;
 
         --success: #4ac48b;
+        --success-solid: #1FCC85;
+        --warning-solid: #F5A524;
+        --danger-solid: #E5484D;
         --success-soft: #10281f;
         --warning: #e3a34a;
         --warning-soft: #2a1f0f;
@@ -74,6 +90,13 @@
 @layer base {
     html {
         font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+        font-size: 13.5px;
+    }
+
+    /* Nunito porte les titres et les chiffres, Inter le reste : c'est ce contraste qui donne
+       au tableau de bord son allure, et il vient du prototype. */
+    h1, h2, h3, .nu {
+        font-family: 'Nunito', 'Inter', system-ui, sans-serif;
     }
 
     body {
@@ -83,7 +106,8 @@
     }
 
     h1, h2, h3 {
-        letter-spacing: -0.015em;
+        letter-spacing: -0.03em;
+        color: var(--navy);
     }
 }
 
@@ -309,6 +333,233 @@
         border-radius: var(--radius);
         background-color: var(--danger-soft);
         color: var(--danger);
+    }
+
+    /* ---- Coquille : barre supérieure bleu nuit et onglets ---- */
+    .app-top {
+        @apply h-14 flex items-center gap-4 px-4 sticky top-0 z-40 text-white;
+        background-color: var(--navy);
+    }
+
+    .app-tabs {
+        @apply flex items-stretch gap-0 px-3 sticky z-30 overflow-x-auto;
+        top: 3.5rem;
+        min-height: 46px;
+        background-color: var(--surface-raised);
+        border-bottom: 1px solid var(--border);
+    }
+
+    .app-tab {
+        @apply flex items-center gap-2 px-3 text-sm font-semibold whitespace-nowrap;
+        color: var(--text-muted);
+        border-bottom: 2px solid transparent;
+    }
+
+    .app-tab:hover {
+        color: var(--navy);
+        background-color: var(--surface-sunken);
+    }
+
+    .app-tab-active {
+        color: var(--navy);
+        font-weight: 800;
+        border-bottom-color: var(--brand-600);
+    }
+
+    /* ---- Grille du tableau de bord ---- */
+    .grid-12 {
+        @apply grid gap-3.5;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+    }
+
+    /* ---- Indicateurs ---- */
+    .kpi-label {
+        @apply flex items-center gap-1.5 text-[11px] font-bold uppercase;
+        letter-spacing: .06em;
+        color: var(--text-faint);
+    }
+
+    .kpi-value {
+        @apply mt-2 text-[26px] font-black leading-none tabular-nums;
+        font-family: 'Nunito', system-ui, sans-serif;
+        letter-spacing: -.9px;
+        color: var(--navy);
+    }
+
+    .kpi-value small {
+        @apply text-sm font-extrabold ml-1;
+        letter-spacing: 0;
+        color: var(--text-muted);
+    }
+
+    .kpi-foot {
+        @apply flex items-center gap-2 mt-2 text-[11.5px] font-semibold;
+        color: var(--text-faint);
+    }
+
+    /* Écart chiffré : vert s'il progresse, rouge sinon. La couleur porte l'information, elle
+       ne décore pas — un écart sans signe se lit de travers. */
+    .delta {
+        @apply inline-flex items-center gap-1 px-1.5 py-0.5 text-[11.5px] font-extrabold;
+        border-radius: 5px;
+    }
+
+    .delta-up {
+        background-color: var(--success-soft);
+        color: var(--success);
+    }
+
+    .delta-down {
+        background-color: var(--danger-soft);
+        color: var(--danger);
+    }
+
+    /* ---- Flux en direct ---- */
+    .live-dot {
+        @apply inline-block w-1.5 h-1.5 rounded-full;
+        background-color: var(--success-solid);
+        box-shadow: 0 0 0 3px var(--success-soft);
+    }
+
+    .feed-row {
+        @apply flex items-center gap-2.5 px-4 py-2.5;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .feed-row:last-child {
+        border-bottom: 0;
+    }
+
+    /* Pastille d'initiales, à la place d'une photo que l'école n'a pas. */
+    .avatar {
+        @apply shrink-0 rounded-full grid place-items-center font-bold;
+        font-size: 11px;
+    }
+
+    /* ---- Cartes à en-tête, telles que le prototype les emploie ---- */
+    .card-h {
+        @apply flex items-start justify-between gap-3 px-4 py-3;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .card-h h3 {
+        @apply text-sm font-extrabold;
+        color: var(--navy);
+    }
+
+    .card-h .sub {
+        @apply text-[11.5px] font-medium mt-0.5;
+        color: var(--text-faint);
+    }
+
+    .card-b {
+        @apply p-4;
+    }
+
+    .card-f {
+        @apply flex items-center justify-between gap-2.5 px-4 py-2.5;
+        border-top: 1px solid var(--border);
+    }
+
+    /* Barre d'outils d'un tableau : recherche et filtres, au-dessus des colonnes. */
+    .tbar {
+        @apply flex flex-wrap items-center gap-2 px-4 py-3;
+        border-bottom: 1px solid var(--border);
+    }
+
+    /* Champ compact de la barre d'outils, à ne pas confondre avec `.input` des formulaires :
+       celui-ci enveloppe une icône et se règle sur la hauteur d'un filtre, pas d'une saisie. */
+    .inp {
+        @apply flex items-center gap-2 h-8 px-2.5 rounded-lg;
+        background-color: var(--surface-raised);
+        border: 1px solid var(--border-strong);
+        color: var(--text-faint);
+    }
+
+    .inp:focus-within {
+        border-color: var(--brand-500);
+        box-shadow: 0 0 0 3px var(--brand-50);
+    }
+
+    .inp input,
+    .inp select {
+        @apply bg-transparent border-0 outline-none text-sm min-w-0;
+        color: var(--text);
+    }
+
+    .inp select {
+        @apply font-semibold cursor-pointer;
+    }
+
+    /* ---- Étiquettes ---- */
+    .pill {
+        @apply inline-flex items-center gap-1.5 h-[22px] px-2 rounded-md text-[11.5px] font-bold;
+        white-space: nowrap;
+    }
+
+    .tag {
+        @apply inline-flex items-center h-5 px-1.5 rounded text-[11px] font-semibold;
+        background-color: var(--surface-sunken);
+        color: var(--text-muted);
+        white-space: nowrap;
+    }
+
+    /* Bouton-filtre à deux états. `aria-pressed` porte l'état : la couleur seule ne le dirait
+       pas à un lecteur d'écran. */
+    .chip {
+        @apply h-[30px] px-3 rounded-lg text-[12.5px] font-semibold;
+        background-color: var(--surface-raised);
+        border: 1px solid var(--border-strong);
+        color: var(--text-muted);
+        white-space: nowrap;
+    }
+
+    .chip[aria-pressed="true"] {
+        background-color: var(--brand-50);
+        border-color: var(--brand-100);
+        color: var(--brand-700);
+    }
+
+    /* ---- Identité d'une ligne : nom en gras, précision en dessous ---- */
+    .nm b {
+        @apply block text-[12.5px] font-bold leading-tight truncate;
+        color: var(--navy);
+    }
+
+    .nm span {
+        @apply block text-[11.5px] font-medium leading-tight;
+        color: var(--text-faint);
+    }
+
+    /* ---- Listes et fiches de détail ---- */
+    .lst > * {
+        @apply px-4 py-3;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .lst > *:last-child {
+        border-bottom: 0;
+    }
+
+    .sec {
+        @apply text-[11px] font-bold uppercase mb-2.5;
+        letter-spacing: .08em;
+        color: var(--text-faint);
+    }
+
+    .kv {
+        @apply grid gap-y-2.5 gap-x-4 text-[13px];
+        grid-template-columns: auto 1fr;
+    }
+
+    .kv dt {
+        @apply font-medium;
+        color: var(--text-faint);
+    }
+
+    .kv dd {
+        @apply m-0 font-bold text-right;
+        color: var(--navy);
     }
 
     /* ---- Navigation ---- */
