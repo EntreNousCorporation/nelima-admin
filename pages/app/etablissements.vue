@@ -16,7 +16,11 @@ type Establishment = {
 
 /** Contacts et direction : ils ne voyagent pas dans la liste, la fiche va les chercher. */
 type EstablishmentDetail = Establishment & {
-    contacts?: { type: string; value: string; isPrimary?: boolean }[];
+    shortName?: string;
+    accreditationNumber?: string;
+    /** L'`id` du contact est indispensable : c'est par lui que le PUT met à jour l'existant au lieu
+     *  d'en créer un doublon (contrainte d'unicité applicative sur le contact). */
+    contacts?: { id?: string; type: string; value: string; isPrimary?: boolean }[];
     principal?: { firstName?: string; lastName?: string };
 };
 
@@ -62,6 +66,27 @@ const planDraft = ref<SubscriptionPlan | ''>('');
 const subscribedAtDraft = ref('');
 const cityDraft = ref('');
 const savingPlan = ref(false);
+
+/* Identité de l'école, éditée indépendamment de l'abonnement. */
+const nameDraft = ref('');
+const shortNameDraft = ref('');
+const accreditationDraft = ref('');
+const webSiteDraft = ref('');
+const phoneDraft = ref('');
+const emailDraft = ref('');
+const savingSchool = ref(false);
+
+/**
+ * Contact principal d'un type donné, tel qu'il est enregistré.
+ *
+ * <p>On le retrouve pour réutiliser son `id` au moment d'enregistrer : c'est ce qui distingue une
+ * mise à jour d'une création, et évite le doublon que la contrainte d'unicité applicative refuse.
+ */
+function primaryContact(type: 'EMAIL' | 'PHONE') {
+    const contacts = openedDetail.value?.contacts ?? [];
+    return contacts.find((contact) => contact.type === type && contact.isPrimary)
+        ?? contacts.find((contact) => contact.type === type);
+}
 
 function statOf(id: string) {
     return stats.value[id] ?? {
@@ -158,6 +183,24 @@ function resetDrafts(id: string) {
     planDraft.value = statOf(id).subscriptionPlan ?? '';
     subscribedAtDraft.value = statOf(id).subscribedAt ?? new Date().toISOString().slice(0, 10);
     cityDraft.value = statOf(id).city ?? '';
+    resetSchoolDrafts();
+}
+
+/**
+ * Brouillons d'identité de l'école.
+ *
+ * <p>À l'ouverture, le détail n'est pas encore arrivé : la liste amorce ce qu'elle sait (nom, site,
+ * ville), et cet appel est rejoué une fois le détail chargé pour compléter nom court, agrément et
+ * contacts. La ville, elle, reste servie par la liste, source déjà lue partout ailleurs.
+ */
+function resetSchoolDrafts() {
+    const detail = openedDetail.value;
+    nameDraft.value = detail?.name ?? opened.value?.name ?? '';
+    shortNameDraft.value = detail?.shortName ?? '';
+    accreditationDraft.value = detail?.accreditationNumber ?? '';
+    webSiteDraft.value = detail?.webSite ?? opened.value?.webSite ?? '';
+    phoneDraft.value = primaryContact('PHONE')?.value ?? '';
+    emailDraft.value = primaryContact('EMAIL')?.value ?? '';
 }
 
 async function openSchool(row: Establishment) {
@@ -173,7 +216,11 @@ async function openSchool(row: Establishment) {
         api<EstablishmentDetail>(`/establishments/${row.id}`),
     ]);
     if (invoices.status === 'fulfilled') openedInvoices.value = invoices.value;
-    if (detail.status === 'fulfilled') openedDetail.value = detail.value;
+    if (detail.status === 'fulfilled') {
+        openedDetail.value = detail.value;
+        // Le détail complète ce que la liste ne portait pas : nom court, agrément, contacts.
+        resetSchoolDrafts();
+    }
 }
 
 async function savePlan() {
@@ -185,13 +232,6 @@ async function savePlan() {
             plan: planDraft.value,
             subscribedAt: subscribedAtDraft.value || undefined,
         });
-        // Deux ressources distinctes : la localité vit sur l'établissement, pas sur l'abonnement.
-        if (cityDraft.value !== (statOf(opened.value.id).city ?? '')) {
-            await api(`/establishments/${opened.value.id}`, {
-                method: 'PUT',
-                body: { city: cityDraft.value || null },
-            });
-        }
         created.value = `Abonnement de ${opened.value.name} enregistré.`;
         opened.value = null;
         editing.value = false;
@@ -200,6 +240,67 @@ async function savePlan() {
         error.value = e?.data?.debugMessage ?? "La formule n'a pas pu être enregistrée.";
     } finally {
         savingPlan.value = false;
+    }
+}
+
+/**
+ * Enregistrement de l'identité de l'école, indépendamment de l'abonnement.
+ *
+ * <p>Le PUT est un patch : les champs vides ne sont pas envoyés, donc rien n'est effacé par
+ * omission. Les contacts, eux, repartent avec l'`id` du contact existant — c'est ce qui les fait
+ * mettre à jour plutôt que dupliquer, la contrainte d'unicité applicative refusant le doublon. On
+ * conserve leur `isPrimary` : le principal reste principal. Un contact vide n'est pas envoyé.
+ */
+async function saveSchool() {
+    if (!opened.value) return;
+    savingSchool.value = true;
+    error.value = '';
+    try {
+        const contacts: {
+            id?: string; value: string; type: 'EMAIL' | 'PHONE'; isPrimary?: boolean;
+        }[] = [];
+        const phone = primaryContact('PHONE');
+        const email = primaryContact('EMAIL');
+        if (phoneDraft.value.trim()) {
+            contacts.push({
+                id: phone?.id,
+                value: phoneDraft.value.trim(),
+                type: 'PHONE',
+                isPrimary: phone?.isPrimary ?? true,
+            });
+        }
+        if (emailDraft.value.trim()) {
+            contacts.push({
+                id: email?.id,
+                value: emailDraft.value.trim(),
+                type: 'EMAIL',
+                isPrimary: email?.isPrimary ?? true,
+            });
+        }
+        await api(`/establishments/${opened.value.id}`, {
+            method: 'PUT',
+            body: {
+                name: nameDraft.value.trim() || undefined,
+                shortName: shortNameDraft.value.trim() || undefined,
+                accreditationNumber: accreditationDraft.value.trim() || undefined,
+                city: cityDraft.value.trim() || undefined,
+                webSite: webSiteDraft.value.trim() || undefined,
+                contacts: contacts.length ? contacts : undefined,
+            },
+        });
+        created.value = `Les informations de ${nameDraft.value.trim() || opened.value.name} ont été enregistrées.`;
+        // Recharge la liste, puis le détail : la fiche ouverte doit refléter ce qui vient d'être écrit.
+        const id = opened.value.id;
+        await load();
+        opened.value = rows.value.find((row) => row.id === id) ?? opened.value;
+        const detail = await api<EstablishmentDetail>(`/establishments/${id}`).catch(() => null);
+        if (detail) openedDetail.value = detail;
+        resetSchoolDrafts();
+        editing.value = false;
+    } catch (e: any) {
+        error.value = e?.data?.debugMessage ?? "Les informations de l'école n'ont pas pu être enregistrées.";
+    } finally {
+        savingSchool.value = false;
     }
 }
 
@@ -704,17 +805,79 @@ onMounted(async () => {
                         dès qu'une facture s'appuie dessus.
                     </p>
                 </div>
-                <div>
-                    <label class="field-label" for="city">Ville</label>
-                    <input
-                        id="city" v-model="cityDraft" type="text" class="input"
-                        placeholder="Abidjan, San-Pédro…"
-                    />
-                    <p class="text-[12px] mt-1" style="color: var(--text-faint)">
-                        Elle situe l'école dans les listes, et reste distincte de l'adresse postale.
-                    </p>
-                </div>
+                <button
+                    class="btn-primary self-start" :disabled="savingPlan || !planDraft" @click="savePlan"
+                >
+                    <BoIcon name="check" :size="16" />
+                    {{ savingPlan ? 'Enregistrement…' : "Enregistrer l'abonnement" }}
+                </button>
             </div>
+
+            <!-- Identité de l'école : éditée à part de l'abonnement, elle n'exige aucune formule et
+                 possède son propre enregistrement. -->
+            <template v-if="editing">
+                <p class="sec">Modifier l'école</p>
+                <div class="flex flex-col gap-3.5 mb-5">
+                    <div>
+                        <label class="field-label" for="schoolName">Nom</label>
+                        <input
+                            id="schoolName" v-model="nameDraft" type="text" class="input"
+                            placeholder="Groupe Scolaire…"
+                        />
+                    </div>
+                    <div>
+                        <label class="field-label" for="schoolShortName">Nom court</label>
+                        <input
+                            id="schoolShortName" v-model="shortNameDraft" type="text" class="input"
+                            placeholder="Sigle affiché dans les listes"
+                        />
+                    </div>
+                    <div>
+                        <label class="field-label" for="schoolAccreditation">Numéro d'agrément</label>
+                        <input
+                            id="schoolAccreditation" v-model="accreditationDraft" type="text" class="input"
+                            placeholder="Agrément du ministère"
+                        />
+                    </div>
+                    <div>
+                        <label class="field-label" for="schoolCity">Ville</label>
+                        <input
+                            id="schoolCity" v-model="cityDraft" type="text" class="input"
+                            placeholder="Abidjan, San-Pédro…"
+                        />
+                        <p class="text-[12px] mt-1" style="color: var(--text-faint)">
+                            Elle situe l'école dans les listes, et reste distincte de l'adresse postale.
+                        </p>
+                    </div>
+                    <div>
+                        <label class="field-label" for="schoolPhone">Téléphone</label>
+                        <input
+                            id="schoolPhone" v-model="phoneDraft" type="tel" class="input"
+                            placeholder="+225…"
+                        />
+                    </div>
+                    <div>
+                        <label class="field-label" for="schoolEmail">Email de contact</label>
+                        <input
+                            id="schoolEmail" v-model="emailDraft" type="email" class="input"
+                            placeholder="contact@ecole.ci"
+                        />
+                    </div>
+                    <div>
+                        <label class="field-label" for="schoolWebSite">Site web (facultatif)</label>
+                        <input
+                            id="schoolWebSite" v-model="webSiteDraft" type="url" class="input"
+                            placeholder="https://…"
+                        />
+                    </div>
+                    <button
+                        class="btn-primary self-start" :disabled="savingSchool" @click="saveSchool"
+                    >
+                        <BoIcon name="check" :size="16" />
+                        {{ savingSchool ? 'Enregistrement…' : 'Enregistrer les informations' }}
+                    </button>
+                </div>
+            </template>
 
             <p class="sec">Scolarités encaissées via Nelima</p>
             <div class="grid-12 mb-3">
@@ -806,19 +969,15 @@ onMounted(async () => {
 
             <template #footer>
                 <template v-if="editing">
-                    <button
-                        class="btn-primary" :disabled="savingPlan || !planDraft" @click="savePlan"
-                    >
-                        <BoIcon name="check" :size="16" />
-                        {{ savingPlan ? 'Enregistrement…' : 'Enregistrer' }}
-                    </button>
-                    <button class="btn-secondary" :disabled="savingPlan" @click="cancelEdit">
-                        Annuler
+                    <!-- Chaque section a son propre enregistrement (abonnement, informations) : le
+                         pied ne fait que sortir du mode édition. -->
+                    <button class="btn-secondary" :disabled="savingPlan || savingSchool" @click="cancelEdit">
+                        Fermer l'édition
                     </button>
                 </template>
                 <template v-else>
                     <button class="btn-primary" @click="editing = true">
-                        <BoIcon name="edit" :size="16" />Modifier l'abonnement
+                        <BoIcon name="edit" :size="16" />Modifier l'école
                     </button>
                     <a
                         v-if="contactEmail" :href="`mailto:${contactEmail}`" class="btn-secondary"
