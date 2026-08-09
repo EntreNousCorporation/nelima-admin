@@ -51,6 +51,10 @@
     --danger: #C4363B;
     --danger-soft: #FDECEE;
     --danger-solid: #E5484D;
+    /* Violet : réservé aux natures d'activité, jamais à un état. Une couleur de sens de plus
+       affaiblirait les trois qui en portent un. */
+    --purple: #6A3BD6;
+    --purple-soft: #F1EBFF;
 
     --radius: 9px;
     --radius-lg: 12px;
@@ -78,6 +82,8 @@
         --warning-solid: #F5A524;
         --danger-solid: #E5484D;
         --success-soft: #10281f;
+        --purple: #b79bff;
+        --purple-soft: #1d1630;
         --warning: #e3a34a;
         --warning-soft: #2a1f0f;
         --danger: #f2837a;
@@ -198,11 +204,42 @@
         background-color: var(--surface-sunken);
     }
 
+    /* Ligne sélectionnée : elle prime sur le survol, sinon on perd de vue ce qu'on a choisi dès
+       que la souris passe ailleurs. */
+    .table tbody tr[aria-selected="true"] td,
+    .table tbody tr[aria-selected="true"]:hover td {
+        background-color: var(--brand-50);
+    }
+
     /* Montants alignés à droite et en chasse fixe : c'est ce qui rend une colonne de nombres
        comparable d'une ligne à l'autre. */
     .num {
         @apply text-right tabular-nums font-medium;
         white-space: nowrap;
+    }
+
+    /* Colonne alignée à droite, **titre compris**.
+       `.table thead th` porte `text-left` sur un sélecteur plus spécifique qu'une classe
+       utilitaire : poser `text-right` sur l'en-tête ne suffisait pas, et les titres « Net école »
+       et « Frais » restaient à gauche au-dessus de chiffres alignés à droite. */
+    .table thead th.r,
+    .table tbody td.r,
+    .table thead th.num,
+    .table tbody td.num {
+        text-align: right;
+    }
+
+    /* Un chiffre de tableau se lit en gras et en bleu nuit, comme le `.tb .m` de la maquette : dans
+       une colonne de montants, c'est le chiffre qui porte l'information, pas le libellé de la
+       ligne. La chasse tabulaire aligne les unités entre elles, sans quoi deux montants de même
+       longueur ne se comparent pas d'un coup d'œil.
+
+       La couleur reste surchargeable par une règle en ligne — un impayé en rouge, un tiret grisé —
+       puisqu'un style d'attribut l'emporte sur une classe. */
+    .table tbody td.num {
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        color: var(--navy);
     }
 
     /* ---- Boutons ---- */
@@ -240,6 +277,17 @@
     .btn-ghost:hover:not(:disabled) {
         background-color: var(--surface-sunken);
         color: var(--text);
+    }
+
+    /* Réservé aux actions qui retirent quelque chose — annuler une facture, désactiver un
+       compte. Rouge parce qu'on n'y revient pas sans laisser de trace, pas parce que c'est grave. */
+    .btn-danger {
+        @apply btn text-white;
+        background-color: var(--danger);
+    }
+
+    .btn-danger:hover:not(:disabled) {
+        filter: brightness(.92);
     }
 
     .btn-sm {
@@ -366,10 +414,245 @@
         border-bottom-color: var(--brand-600);
     }
 
+    /* Bouton d'icône de la barre supérieure : réglages, déconnexion, encaissement. */
+    .ic-btn {
+        @apply w-[34px] h-[34px] rounded-lg grid place-items-center shrink-0 relative;
+    }
+
+    .app-top .ic-btn:hover,
+    .app-top .ic-btn[aria-current="page"] {
+        background: rgba(255, 255, 255, .13);
+    }
+
+    /* Bouton de compte : pastille, nom, fonction en dessous. La fonction n'est pas décorative —
+       c'est elle qui dit à l'utilisateur ce que l'application va lui montrer. */
+    .me {
+        @apply flex items-center gap-2.5 h-[38px] pl-[3px] pr-2 rounded-[10px] shrink-0;
+    }
+
+    .me:hover {
+        background: rgba(255, 255, 255, .1);
+    }
+
+    /* Portée au bloc de texte, et non à `.me span` : la pastille d'initiales est elle aussi un
+       `span`, et un `display: block` posé sur elle annulait son centrage — les initiales se
+       collaient au haut du cercle. Le prototype ne rencontrait pas le cas, sa pastille étant un
+       `div`. */
+    .me div b {
+        @apply block text-[12.5px] font-bold leading-tight;
+    }
+
+    .me div span {
+        @apply block text-[11px] font-medium leading-tight;
+        color: var(--brand-300);
+    }
+
+    /* Menu déroulant du compte, ancré sous la barre. */
+    .acc-menu {
+        @apply absolute right-0 mt-1.5 w-[248px] p-1.5 rounded-xl z-50;
+        background: var(--surface-raised);
+        border: 1px solid var(--border);
+        box-shadow: 0 16px 40px rgba(11, 46, 102, .18);
+    }
+
+    .acc-menu button,
+    .acc-menu a {
+        @apply w-full flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-[12.8px] font-semibold text-left;
+        color: var(--text);
+    }
+
+    .acc-menu button:hover,
+    .acc-menu a:hover {
+        background: var(--surface-sunken);
+    }
+
+    .acc-sep {
+        @apply my-1.5;
+        border-top: 1px solid var(--border);
+    }
+
+    /* ---- Chargement ---- */
+
+    /*
+     * Squelette : une barre qui prend la place de la donnée à venir.
+     *
+     * Un « Chargement… » centré fait sauter la page quand les lignes arrivent, et sur une requête
+     * lente il ne dit pas si l'écran travaille ou s'il est en panne. Le squelette garde la forme du
+     * tableau et son mouvement dit que quelque chose se passe.
+     */
+    .sk {
+        @apply block rounded;
+        background: linear-gradient(90deg,
+            var(--surface-sunken) 25%,
+            var(--border) 37%,
+            var(--surface-sunken) 63%);
+        background-size: 400% 100%;
+        animation: sk-shimmer 1.4s ease infinite;
+    }
+
+    /* ---- Cloche de notifications ---- */
+
+    /* Le liseré bleu nuit détache la pastille de l'icône : sans lui, le rouge sur le bleu de la
+       barre se lit comme une bavure. */
+    .notif-badge {
+        @apply absolute grid place-items-center rounded-[9px] not-italic;
+        top: 2px;
+        right: 2px;
+        min-width: 17px;
+        height: 17px;
+        padding: 0 4px;
+        background: var(--danger-solid);
+        color: #fff;
+        font: 800 10px/1 'Inter', sans-serif;
+        border: 2px solid var(--navy);
+    }
+
+    .notif-panel {
+        @apply absolute right-0 z-50 overflow-hidden rounded-xl;
+        top: 44px;
+        width: 380px;
+        max-width: 92vw;
+        background: var(--surface-raised);
+        border: 1px solid var(--border);
+        box-shadow: 0 18px 46px rgba(11, 46, 102, .22);
+        color: var(--text);
+    }
+
+    .notif-head {
+        @apply flex items-center justify-between gap-2 px-3.5 py-3;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .notif-list {
+        @apply overflow-y-auto;
+        max-height: 60vh;
+    }
+
+    .notif-item {
+        @apply flex items-center gap-2.5 px-3.5 py-3;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .notif-item:last-child {
+        border-bottom: 0;
+    }
+
+    .notif-item:hover {
+        background: var(--surface-sunken);
+    }
+
+    /* Le non-lu se marque par un liseré, pas par un fond : un panneau entièrement teinté au
+       premier chargement ne distingue plus rien. */
+    .notif-item-unread {
+        box-shadow: inset 3px 0 0 var(--brand-600);
+    }
+
+    /* ---- Sous-navigation segmentée ---- */
+    .sub-nav {
+        @apply flex gap-1 p-[3px] rounded-[10px] mb-4 w-fit max-w-full overflow-x-auto;
+        background: var(--border);
+    }
+
+    .sub-nav a,
+    .sub-nav button {
+        @apply flex items-center h-8 px-3 rounded-lg text-[12.5px] font-bold whitespace-nowrap;
+        color: var(--text-muted);
+    }
+
+    .sub-nav a[aria-current="page"],
+    .sub-nav button[aria-current="page"] {
+        background: var(--surface-raised);
+        color: var(--navy);
+        box-shadow: 0 1px 3px rgba(11, 46, 102, .1);
+    }
+
     /* ---- Grille du tableau de bord ---- */
     .grid-12 {
         @apply grid gap-3.5;
         grid-template-columns: repeat(12, minmax(0, 1fr));
+    }
+
+    /* Largeurs de la grille de douze, nommées comme dans le prototype. Elles se replient sur les
+       écrans étroits : une carte de trois colonnes sur un portable ne montrerait qu'un chiffre
+       tronqué. */
+    .c3 { grid-column: span 3 }
+    .c4 { grid-column: span 4 }
+    .c5 { grid-column: span 5 }
+    .c6 { grid-column: span 6 }
+    .c7 { grid-column: span 7 }
+    .c8 { grid-column: span 8 }
+    .c9 { grid-column: span 9 }
+    .c12 { grid-column: span 12 }
+
+    /* Ligne de tableau qui s'ouvre au clic. Le curseur le dit avant l'essai. */
+    .cl {
+        @apply cursor-pointer;
+    }
+
+    /*
+     * Mention « Console interne ».
+     *
+     * Elle n'est pas décorative : les deux applications se ressemblent à dessein, et rien d'autre
+     * ne distingue au premier coup d'œil la console de YPYit du portail d'une école. Se croire chez
+     * l'un quand on est chez l'autre, sur des écrans qui parlent d'argent, est le genre d'erreur
+     * qu'on ne fait qu'une fois — mais une fois de trop.
+     */
+    .adm-badge {
+        @apply inline-flex items-center h-[22px] px-2 rounded-md text-[10.5px] font-extrabold uppercase shrink-0;
+        letter-spacing: .08em;
+        background: rgba(255, 255, 255, .14);
+        color: #fff;
+    }
+
+    /* ---- Interrupteur ---- */
+    .sw {
+        @apply relative w-[38px] h-[22px] rounded-xl shrink-0 transition-colors;
+        background: var(--border-strong);
+    }
+
+    .sw i {
+        @apply absolute top-[3px] left-[3px] w-4 h-4 rounded-full transition-transform;
+        background: #fff;
+        box-shadow: 0 1px 3px rgba(11, 46, 102, .28);
+    }
+
+    .sw[aria-checked="true"] {
+        background: var(--brand-600);
+    }
+
+    .sw[aria-checked="true"] i {
+        transform: translateX(16px);
+    }
+
+    .sw:disabled {
+        @apply opacity-45 cursor-not-allowed;
+    }
+
+    /* ---- Bulle d'explication ---- */
+
+    /*
+     * Une pastille « ? » qui explique le chiffre au survol.
+     *
+     * Le libellé d'un indicateur tient en trois mots ; la règle qui le produit, non. « Taux de
+     * recouvrement » ne dit ni sur quelle période, ni ce qui est compté, ni à partir de quel seuil
+     * il faut s'inquiéter. Sans cette bulle, chacun devine — et deux personnes lisent le même
+     * chiffre différemment.
+     *
+     * Le texte est porté par `data-tip` et rendu en `::after` : rien à monter, rien à démonter, et
+     * la bulle reste accessible au clavier par `:focus-visible`.
+     */
+    .info-dot {
+        @apply inline-grid place-items-center w-[15px] h-[15px] rounded-lg shrink-0 align-middle;
+        background: var(--border);
+        color: var(--text-muted);
+        font: 800 10px/1 'Inter', sans-serif;
+        cursor: help;
+    }
+
+    .info-dot:hover,
+    .info-dot:focus-visible {
+        background: var(--brand-600);
+        color: #fff;
     }
 
     /* ---- Indicateurs ---- */
@@ -522,7 +805,7 @@
 
     /* ---- Identité d'une ligne : nom en gras, précision en dessous ---- */
     .nm b {
-        @apply block text-[12.5px] font-bold leading-tight truncate;
+        @apply block text-[13px] font-bold leading-tight truncate;
         color: var(--navy);
     }
 
@@ -579,9 +862,215 @@
     }
 }
 
+/* Bulle d'explication : hors `@layer components`, pour que les pseudo-éléments ne soient pas
+   purgés avec les classes utilitaires inutilisées. */
+[data-tip] {
+    position: relative;
+}
+
+[data-tip]::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 9px);
+    transform: translateX(-50%) translateY(-3px);
+    background: var(--navy);
+    color: #fff;
+    font: 600 11.5px/1.45 'Inter', sans-serif;
+    letter-spacing: 0;
+    text-transform: none;
+    text-align: left;
+    padding: 7px 10px;
+    border-radius: 8px;
+    width: max-content;
+    max-width: 250px;
+    white-space: normal;
+    box-shadow: 0 8px 22px rgba(8, 31, 71, .28);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .14s ease, transform .14s ease;
+    z-index: 90;
+}
+
+[data-tip]::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 3px);
+    transform: translateX(-50%) translateY(-3px);
+    border: 5px solid transparent;
+    border-bottom-color: var(--navy);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .14s ease, transform .14s ease;
+    z-index: 90;
+}
+
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after,
+[data-tip]:hover::before,
+[data-tip]:focus-visible::before {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+/* Bulle au-dessus, pour ce qui touche le bas de l'écran. */
+[data-tip-pos="top"]::after {
+    top: auto;
+    bottom: calc(100% + 9px);
+    transform: translateX(-50%) translateY(3px);
+}
+
+[data-tip-pos="top"]::before {
+    top: auto;
+    bottom: calc(100% + 3px);
+    border-bottom-color: transparent;
+    border-top-color: var(--navy);
+    transform: translateX(-50%) translateY(3px);
+}
+
+[data-tip-pos="top"]:hover::after,
+[data-tip-pos="top"]:hover::before {
+    transform: translateX(-50%) translateY(0);
+}
+
+@keyframes sk-shimmer {
+    0% { background-position: 100% 50% }
+    100% { background-position: 0 50% }
+}
+
+/* Un utilisateur qui a demandé moins d'animation n'a pas demandé moins d'information : la barre
+   reste, seul le mouvement s'arrête. */
+@media (prefers-reduced-motion: reduce) {
+    .sk {
+        animation: none;
+    }
+}
+
+@media (max-width: 1340px) {
+    .c3, .c4 { grid-column: span 6 }
+    .c5, .c7, .c8, .c9 { grid-column: span 12 }
+}
+
+@media (max-width: 760px) {
+    .c3, .c4, .c6 { grid-column: span 12 }
+}
+
 @media (prefers-color-scheme: dark) {
     .nav-link-active {
         background-color: rgba(37, 71, 235, .2);
         color: var(--brand-300);
     }
+}
+
+/* ---- Recherche de la console ----------------------------------------------------------------
+   Champ posé dans la barre bleu nuit : il emprunte le fond translucide des autres boutons du
+   bandeau, et non le blanc des champs de formulaire, qui trouerait la barre.                    */
+.cs-inp {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .09);
+    color: rgba(255, 255, 255, .75);
+    transition: background .15s;
+}
+.cs-inp:focus-within { background: rgba(255, 255, 255, .16); }
+.cs-inp input {
+    flex: 1;
+    min-width: 0;
+    background: none;
+    border: 0;
+    outline: none;
+    color: #fff;
+    font: 500 12.8px/1 'Inter', sans-serif;
+}
+.cs-inp input::placeholder { color: rgba(255, 255, 255, .55); }
+.cs-inp .kbd {
+    flex-shrink: 0;
+    padding: 2px 5px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, .12);
+    font: 700 10.5px/1.3 'Inter', sans-serif;
+    letter-spacing: .02em;
+}
+
+.cs-menu {
+    position: absolute;
+    z-index: 50;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    padding: 5px;
+    border-radius: 14px;
+    background: #fff;
+    border: 1px solid var(--border);
+    box-shadow: 0 18px 44px rgba(11, 31, 71, .18);
+    max-height: 380px;
+    overflow-y: auto;
+}
+.cs-menu button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 10px;
+    text-align: left;
+    color: var(--text-muted);
+}
+.cs-menu button:hover { background: var(--surface-sunken); }
+.cs-menu button b {
+    display: block;
+    font: 700 12.8px/1.3 'Inter', sans-serif;
+    color: var(--navy);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.cs-menu button em {
+    display: block;
+    font: 500 11.5px/1.4 'Inter', sans-serif;
+    font-style: normal;
+    color: var(--text-faint);
+}
+
+/* ---- Lignes de réglage -----------------------------------------------------------------------
+   Reprises du `SRow` du prototype. Séparées par un filet plutôt que posées dans des cartes
+   distinctes : un écran de réglages se parcourt de haut en bas, et une carte par interrupteur
+   ferait perdre de vue qu'ils appartiennent au même sujet.                                       */
+.srow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--border);
+}
+.srow:last-child { border-bottom: 0; }
+
+.srow > div > b {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font: 700 13px/1.3 'Inter', sans-serif;
+    color: var(--navy);
+}
+.srow > div > p {
+    margin-top: 2px;
+    font: 500 12px/1.45 'Inter', sans-serif;
+    color: var(--text-muted);
+}
+
+/* Pastille d'icône : elle catégorise la ligne, elle ne signale rien — d'où le gris. */
+.sic {
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    background: var(--surface-sunken);
+    color: var(--text-muted);
 }

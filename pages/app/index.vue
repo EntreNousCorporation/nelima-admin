@@ -1,16 +1,27 @@
 <script setup lang="ts">
+import { fm, fmc } from '~/composables/useMoney';
+import {
+    PLAN_LABELS, PLAN_TONES, type SubscriptionInvoice, type SubscriptionPlan,
+} from '~/composables/useSubscriptions';
+
 /**
  * Parc clients.
  *
- * Deux appels : `/dashboard/summary`, qui rend les mêmes agrégats qu'à une école mais sans portée
- * lorsqu'un administrateur l'appelle — donc à l'échelle du parc —, et `/dashboard/platform`, qui
- * ajoute ce dont YPYit est seul à avoir besoin : sa commission, et la ventilation par école.
+ * Trois appels : `/dashboard/summary`, qui rend les mêmes agrégats qu'à une école mais sans portée
+ * lorsqu'un administrateur l'appelle — donc à l'échelle du parc —, `/dashboard/platform`, qui ajoute
+ * ce dont YPYit est seul à avoir besoin (sa commission, la ventilation par école, le contrat de
+ * chacune), et les factures d'abonnement, d'où sort le revenu récurrent.
+ *
+ * <p>Les deux revenus ne se mélangent pas : l'abonnement est un montant annuel dû par l'école, la
+ * commission un prélèvement sur les paiements en ligne des familles. Les additionner donnerait un
+ * chiffre que personne ne pourrait rapprocher de quoi que ce soit.
  */
 type MonthlyPoint = { month: string; expected: number; collected: number };
 
 type Summary = {
     studentCount: number;
     collectedThisMonth: number;
+    collectedPreviousMonth: number;
     expectedThisMonth: number;
     receiptsThisMonth: number;
     monthly: MonthlyPoint[];
@@ -24,14 +35,20 @@ type SchoolRow = {
     active: boolean;
     studentCount: number;
     collectedThisMonth: number;
+    expectedThisMonth: number;
     commissionThisMonth: number;
     overdueAmount: number;
     overdueCount: number;
+    subscriptionPlan?: SubscriptionPlan;
+    subscribedAt?: string;
+    subscriptionAmount?: number;
 };
 
 type Platform = {
     schoolCount: number;
     activeSchoolCount: number;
+    schoolCountBeforeThisMonth: number;
+    studentCountBeforeThisMonth: number;
     commissionThisMonth: number;
     commissionPreviousMonth: number;
     onlineCollectedThisMonth: number;
@@ -41,302 +58,434 @@ type Platform = {
 const request = useRequestFetch();
 
 const { data, pending, error } = await useAsyncData('platform-overview', async () => {
-    const [summary, platform] = await Promise.all([
+    const [summary, platform, invoices] = await Promise.all([
         request('/api/v1/dashboard/summary') as Promise<Summary>,
         request('/api/v1/dashboard/platform') as Promise<Platform>,
+        // Une console qui tombe faute de factures ne servirait plus à en émettre.
+        (request('/api/v1/subscriptions/invoices') as Promise<SubscriptionInvoice[]>)
+            .catch(() => [] as SubscriptionInvoice[]),
     ]);
-    return { summary, platform };
+    return { summary, platform, invoices };
 });
-
-const keyword = ref('');
-/**
- * Filtres du parc.
- *
- * Ils portent sur ce qui appelle une action de YPYit — une école qui accumule des impayés, une
- * école qui n'a rien encaissé du mois — et non sur le drapeau d'activité : rien ne permet encore
- * de suspendre un établissement, une bascule « actives / désactivées » ne trierait donc rien.
- */
-const filter = ref<'all' | 'overdue' | 'idle'>('all');
-
-const schools = computed(() => {
-    const q = keyword.value.trim().toLowerCase();
-    return (data.value?.platform.schools ?? []).filter((s) => {
-        if (filter.value === 'overdue' && !(s.overdueCount > 0)) return false;
-        if (filter.value === 'idle' && Number(s.collectedThisMonth ?? 0) > 0) return false;
-        return !q || s.name.toLowerCase().includes(q);
-    });
-});
-
-function xof(amount?: number | null) {
-    return Math.round(amount ?? 0).toLocaleString('fr-FR').replace(/ | /g, ' ');
-}
-
-/** Au-delà du million, l'unité compacte évite de faire lire neuf chiffres d'un coup d'œil. */
-function compact(amount?: number | null) {
-    const value = Math.round(amount ?? 0);
-    if (value >= 1_000_000) {
-        return { value: (value / 1_000_000).toFixed(1).replace('.', ','), unit: 'M FCFA' };
-    }
-    return { value: xof(value), unit: 'FCFA' };
-}
 
 const monthLabel = new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+const year = new Date().getFullYear();
 
-const commission = computed(() => compact(data.value?.platform.commissionThisMonth));
-const collected = computed(() => compact(data.value?.summary.collectedThisMonth));
+/* ---------------- Abonnements ---------------- */
+
+/** Facturé sur l'année civile, annulations exclues : une facture annulée n'est pas un revenu. */
+const billed = computed(() => (data.value?.invoices ?? [])
+    .filter((invoice) => invoice.status !== 'CANCELLED'
+        && new Date(invoice.periodStart).getFullYear() === year));
+
+const billedTotal = computed(() => billed.value
+    .reduce((total, invoice) => total + Number(invoice.amount ?? 0), 0));
+
+const cashedTotal = computed(() => billed.value
+    .filter((invoice) => invoice.status === 'PAID')
+    .reduce((total, invoice) => total + Number(invoice.amount ?? 0), 0));
+
+const lateInvoices = computed(() => billed.value.filter((invoice) => invoice.status === 'LATE'));
 
 /**
- * Écart de commission avec le mois précédent.
+ * Revenu récurrent, mois par mois.
  *
- * Nul quand le mois précédent est à zéro : une progression « infinie » ne veut rien dire, et
- * afficher +100 % sur un premier mois d'activité serait trompeur.
+ * <p>Une facture est portée par son mois d'émission, et son règlement par le mois où il a été
+ * constaté : c'est ce que le graphe compare — ce qui a été facturé, et ce qui est effectivement
+ * rentré. La série couvre douze mois glissants.
  */
-const deltaCommission = computed(() => {
-    const previous = data.value?.platform.commissionPreviousMonth ?? 0;
-    if (!previous) return null;
-    return (((data.value?.platform.commissionThisMonth ?? 0) - previous) / previous) * 100;
+const recurringMonths = computed(() => {
+    const months: { month: string; back: number; front: number }[] = [];
+    const cursor = new Date();
+    cursor.setDate(1);
+    cursor.setMonth(cursor.getMonth() - 11);
+    for (let index = 0; index < 12; index += 1) {
+        months.push({
+            month: `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`,
+            back: 0,
+            front: 0,
+        });
+        cursor.setMonth(cursor.getMonth() + 1);
+    }
+    const slot = new Map(months.map((entry) => [entry.month, entry]));
+
+    for (const invoice of data.value?.invoices ?? []) {
+        if (invoice.cancelled) continue;
+        const issued = slot.get((invoice.issuedAt ?? '').slice(0, 7));
+        if (issued) issued.back += Number(invoice.amount ?? 0);
+        const paid = invoice.paidAt ? slot.get(invoice.paidAt.slice(0, 7)) : undefined;
+        if (paid) paid.front += Number(invoice.amount ?? 0);
+    }
+    return months;
 });
 
-/** Part des encaissements passée par l'agrégateur : c'est la seule qui produit une commission. */
-const onlineShare = computed(() => {
-    const total = data.value?.summary.collectedThisMonth ?? 0;
-    if (!total) return null;
-    return ((data.value?.platform.onlineCollectedThisMonth ?? 0) / total) * 100;
+/** Part de chaque palier dans le revenu récurrent, sur les montants figés à l'émission. */
+const byPlan = computed(() => {
+    const buckets = new Map<SubscriptionPlan, { amount: number; count: number }>();
+    for (const invoice of billed.value) {
+        const bucket = buckets.get(invoice.plan) ?? { amount: 0, count: 0 };
+        bucket.amount += Number(invoice.amount ?? 0);
+        bucket.count += 1;
+        buckets.set(invoice.plan, bucket);
+    }
+    const total = billedTotal.value || 1;
+    return [...buckets.entries()]
+        .map(([plan, bucket]) => ({
+            plan,
+            label: PLAN_LABELS[plan],
+            amount: bucket.amount,
+            count: bucket.count,
+            share: (bucket.amount / total) * 100,
+        }))
+        .sort((a, b) => b.amount - a.amount);
 });
+
+/**
+ * Activité du parc.
+ *
+ * <p>Des faits datés, pas un journal : chaque ligne se relit dans la donnée dont elle sort — une
+ * souscription porte sa date, une facture son émission et son règlement. Rien n'est stocké pour
+ * l'occasion, comme pour la cloche du portail.
+ */
+const activity = computed(() => {
+    const events: {
+        at: string; school?: string; label: string; detail: string; icon: string; tone: string;
+    }[] = [];
+
+    for (const school of data.value?.platform.schools ?? []) {
+        if (!school.subscribedAt) continue;
+        events.push({
+            at: school.subscribedAt, school: school.id, label: school.name,
+            detail: school.subscriptionPlan
+                ? `a souscrit en ${PLAN_LABELS[school.subscriptionPlan]}` : 'a souscrit',
+            // Même vocabulaire que la maquette : l'étincelle marque l'arrivée d'un client,
+            // la caisse un règlement, l'interdit une annulation.
+            icon: 'sparkles', tone: 'var(--brand-700)',
+        });
+    }
+    for (const invoice of data.value?.invoices ?? []) {
+        if (invoice.cancelled) {
+            events.push({
+                at: invoice.issuedAt, school: invoice.establishmentId,
+                label: invoice.establishmentName,
+                detail: `facture ${invoice.number} annulée · ${invoice.cancellationReason ?? 'motif non précisé'}`,
+                icon: 'ban', tone: 'var(--danger)',
+            });
+            continue;
+        }
+        events.push({
+            at: invoice.issuedAt, school: invoice.establishmentId, label: invoice.establishmentName,
+            detail: `facture ${invoice.number} émise · ${fm(invoice.amount)} F`,
+            icon: 'receipt', tone: 'var(--navy)',
+        });
+        if (invoice.paidAt) {
+            events.push({
+                at: invoice.paidAt, school: invoice.establishmentId, label: invoice.establishmentName,
+                detail: `facture ${invoice.number} réglée${invoice.paymentMethod ? ` par ${invoice.paymentMethod.toLowerCase()}` : ''} · ${fm(invoice.amount)} F`,
+                icon: 'cash', tone: 'var(--success)',
+            });
+        }
+    }
+    return events.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 8);
+});
+
+/**
+ * Variation d'une grandeur, en pourcentage.
+ *
+ * <p>Nulle quand le point de comparaison est à zéro : une progression « infinie » ne veut rien
+ * dire, et afficher « +100 % » sur un premier mois d'activité laisserait croire à une croissance
+ * là où il n'y a qu'un début.
+ */
+function growth(now: number, before: number) {
+    if (!before) return null;
+    const delta = Math.round(((now - before) / before) * 1000) / 10;
+    // Zéro est tu : la flèche verte d'un « +0 % » annoncerait une hausse qui n'a pas eu lieu.
+    return delta === 0 ? null : delta;
+}
+
+/** Croissance du revenu récurrent : l'année civile en cours, rapportée à la précédente. */
+const recurringGrowth = computed(() => {
+    const previous = (data.value?.invoices ?? [])
+        .filter((invoice) => invoice.status !== 'CANCELLED'
+            && new Date(invoice.periodStart).getFullYear() === year - 1)
+        .reduce((total, invoice) => total + Number(invoice.amount ?? 0), 0);
+    return growth(billedTotal.value, previous);
+});
+
+const schoolGrowth = computed(() => growth(
+    Number(data.value?.platform.schoolCount ?? 0),
+    Number(data.value?.platform.schoolCountBeforeThisMonth ?? 0)));
+
+const studentGrowth = computed(() => growth(
+    Number(data.value?.summary.studentCount ?? 0),
+    Number(data.value?.platform.studentCountBeforeThisMonth ?? 0)));
+
+const collectedGrowth = computed(() => growth(
+    Number(data.value?.summary.collectedThisMonth ?? 0),
+    Number(data.value?.summary.collectedPreviousMonth ?? 0)));
+
+/* ---------------- Scolarités ---------------- */
 
 const recoveryRate = computed(() => {
-    const expected = data.value?.summary.expectedThisMonth ?? 0;
+    const expected = Number(data.value?.summary.expectedThisMonth ?? 0);
     if (!expected) return null;
     return ((data.value?.summary.collectedThisMonth ?? 0) / expected) * 100;
 });
+
+/**
+ * Recouvrement d'une école : ce qui est rentré, rapporté à ce que l'échéancier prévoyait ce mois.
+ *
+ * <p>Ce n'est pas le score sur 100 de la maquette, qui composait des grandeurs sans rapport. C'est
+ * une mesure, et une école peut la refaire elle-même sur son propre tableau de bord.
+ */
+function recoveryOf(school: SchoolRow) {
+    const expected = Number(school.expectedThisMonth ?? 0);
+    if (!expected) return null;
+    return (Number(school.collectedThisMonth ?? 0) / expected) * 100;
+}
+
+const SEUIL_SURVEILLANCE = 70;
+
+const watchlist = computed(() => (data.value?.platform.schools ?? [])
+    .map((school) => ({ school, rate: recoveryOf(school) }))
+    .filter((row): row is { school: SchoolRow; rate: number } =>
+        row.rate !== null && row.rate < SEUIL_SURVEILLANCE)
+    .sort((a, b) => a.rate - b.rate));
+
+/** Écoles sans contrat : elles ne seront jamais facturées tant que rien n'est arrêté. */
+const withoutPlan = computed(() => (data.value?.platform.schools ?? [])
+    .filter((school) => !school.subscriptionPlan).length);
+
+function openSchool(id: string) {
+    return navigateTo(`/app/etablissements?ecole=${id}`);
+}
+
+function day(iso?: string) {
+    return iso ? new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : '—';
+}
 </script>
 
 <template>
     <div>
         <PageHead
             title="Parc clients"
-            :sub="`${data?.platform.schoolCount ?? 0} établissement${(data?.platform.schoolCount ?? 0) > 1 ? 's' : ''} · ${monthLabel}`"
+            :sub="`Nelima · ${data?.platform.schoolCount ?? 0} établissement${(data?.platform.schoolCount ?? 0) > 1 ? 's' : ''} · ${monthLabel}`"
         >
             <template #actions>
-                <NuxtLink to="/app/etablissements" class="btn-primary">Nouveau partenaire</NuxtLink>
+                <NuxtLink to="/app/etablissements" class="btn-primary">
+                    <BoIcon name="plus" :size="16" />Nouveau partenaire
+                </NuxtLink>
             </template>
         </PageHead>
 
-        <p v-if="error" class="alert-danger mb-4" role="alert">
+        <p v-if="error" class="alert-danger mb-3.5" role="alert">
             Les chiffres du parc n'ont pas pu être chargés. Rechargez la page dans un instant.
         </p>
 
-        <div v-if="pending" class="grid-12">
-            <div v-for="n in 4" :key="n" class="card p-4" style="grid-column: span 3">
-                <div class="h-3 w-24 rounded animate-pulse" style="background: var(--surface-sunken)" />
-                <div class="h-7 w-28 rounded animate-pulse mt-3" style="background: var(--surface-sunken)" />
-            </div>
+        <div class="grid-12 mb-3.5">
+            <KpiCard
+                class="c3" label="Revenu récurrent" icon="cash"
+                :value="fmc(billedTotal).value" :unit="`${fmc(billedTotal).unit} / an`"
+                :delta="recurringGrowth"
+                :foot="billedTotal
+                    ? `${fm(cashedTotal)} F encaissés · ${lateInvoices.length} en retard`
+                    : 'aucun abonnement facturé cette année'"
+                tip="Abonnements facturés sur l'année civile, annulations exclues. C'est le revenu contractuel du parc, distinct des commissions."
+            />
+            <KpiCard
+                class="c3" label="Écoles clientes" icon="building"
+                :value="String(data?.platform.schoolCount ?? 0)" :delta="schoolGrowth"
+                :foot="`${data?.platform.activeSchoolCount ?? 0} active(s) · ${withoutPlan} sans formule · ${lateInvoices.length} en défaut`"
+                tip="Établissements principaux du parc. Une antenne rattachée à un réseau n'est pas un client de plus."
+            />
+            <KpiCard
+                class="c3" label="Élèves gérés" icon="students"
+                :value="fm(data?.summary.studentCount)" :delta="studentGrowth"
+                foot="sur l'ensemble du parc"
+                tip="Volume d'élèves administrés dans Nelima. C'est lui qui appelle un palier d'abonnement, sans l'imposer : la formule retenue prime."
+            />
+            <KpiCard
+                class="c3" label="Scolarités transitées" icon="percent"
+                :value="fmc(data?.summary.collectedThisMonth).value"
+                :unit="fmc(data?.summary.collectedThisMonth).unit" :delta="collectedGrowth"
+                :foot="recoveryRate !== null
+                    ? `${recoveryRate.toFixed(0)} % de l'attendu · ${fm(data?.platform.commissionThisMonth)} F de commission`
+                    : 'aucune échéance ce mois'"
+                tip="Frais de scolarité encaissés ce mois par l'ensemble des écoles. YPYit n'en perçoit que la commission, sur la seule part en ligne."
+            >
+                <template #chart>
+                    <!-- Toujours présent, y compris sans échéance du mois : l'anneau vide dit
+                         « rien à recouvrer », alors que son absence laisse croire à un bogue. -->
+                    <StatDonut
+                        :percent="recoveryRate ?? 0" :label="recoveryRate === null ? '—' : undefined"
+                        :tone="recoveryRate === null ? 'var(--border-strong)'
+                            : recoveryRate < 80 ? 'var(--warning-solid)' : 'var(--success-solid)'"
+                    />
+                </template>
+            </KpiCard>
         </div>
 
-        <template v-else>
-            <div class="grid-12 mb-3.5">
-                <div class="card p-4" style="grid-column: span 3">
-                    <!-- La commission est le seul revenu de Nelima : elle ouvre la console, là où
-                         une école voit d'abord ce qu'elle a encaissé. -->
-                    <span class="kpi-label">Commission perçue · {{ monthLabel.split(' ')[0] }}</span>
-                    <span class="kpi-value">{{ commission.value }}<small>{{ commission.unit }}</small></span>
-                    <span class="kpi-foot">
-                        <span
-                            v-if="deltaCommission !== null"
-                            class="delta" :class="deltaCommission >= 0 ? 'delta-up' : 'delta-down'"
-                        >
-                            {{ deltaCommission >= 0 ? '↗' : '↘' }}
-                            {{ Math.abs(deltaCommission).toFixed(1).replace('.', ',') }} %
-                        </span>
-                        sur les paiements en ligne soldés
-                    </span>
-                </div>
+        <div class="grid-12 mb-3.5">
+            <UiCard
+                class="c8"
+                title="Revenu récurrent" sub="Abonnements facturés et réglés, mois par mois"
+                tip="Barre claire : abonnements facturés, portés par leur mois d'émission. Barre pleine : règlements constatés."
+            >
+                <BarsCompare :points="recurringMonths" back-label="Facturé" front-label="Encaissé" />
+            </UiCard>
 
-                <div class="card p-4" style="grid-column: span 3">
-                    <span class="kpi-label">Scolarités transitées</span>
-                    <span class="kpi-value">{{ collected.value }}<small>{{ collected.unit }}</small></span>
-                    <span class="kpi-foot">
-                        <template v-if="onlineShare !== null">
-                            dont {{ onlineShare.toFixed(0) }} % en ligne, le reste au guichet
-                        </template>
-                        <template v-else>aucun encaissement ce mois</template>
-                    </span>
-                </div>
-
-                <div class="card p-4" style="grid-column: span 3">
-                    <span class="kpi-label">Écoles clientes</span>
-                    <span class="kpi-value">{{ data?.platform.schoolCount ?? 0 }}</span>
-                    <span class="kpi-foot">
-                        {{ data?.platform.activeSchoolCount ?? 0 }} active{{ (data?.platform.activeSchoolCount ?? 0) > 1 ? 's' : '' }}
-                        · {{ xof(data?.summary.studentCount) }} élèves gérés
-                    </span>
-                </div>
-
-                <div class="card p-4 flex items-start justify-between gap-3" style="grid-column: span 3">
-                    <div class="min-w-0">
-                        <span class="kpi-label">Recouvrement du parc</span>
-                        <span class="kpi-value">
-                            <template v-if="recoveryRate !== null">
-                                {{ recoveryRate.toFixed(1).replace('.', ',') }}<small>%</small>
-                            </template>
-                            <template v-else>—</template>
-                        </span>
-                        <span class="kpi-foot">
-                            {{ xof(data?.summary.overdueAmount) }} F en retard
-                        </span>
-                    </div>
-                    <StatDonut
-                        v-if="recoveryRate !== null"
-                        :percent="recoveryRate"
-                        :tone="recoveryRate < 80 ? 'var(--warning-solid)' : 'var(--success-solid)'"
-                    />
-                </div>
-            </div>
-
-            <div class="grid-12">
-                <UiCard
-                    style="grid-column: span 8"
-                    title="Volume traité par la plateforme"
-                    sub="Attendu selon les échéanciers de toutes les écoles, comparé à ce qui est rentré"
-                >
-                    <MonthlyBars :points="data?.summary.monthly ?? []" />
-                </UiCard>
-
-                <UiCard
-                    style="grid-column: span 4" :pad="false"
-                    title="Ce que la plateforme rapporte"
-                    sub="Commission du mois, et sa part dans les flux"
-                >
-                    <dl class="kv p-4">
-                        <dt>Commission du mois</dt>
-                        <dd class="nu">{{ xof(data?.platform.commissionThisMonth) }} F</dd>
-                        <dt>Mois précédent</dt>
-                        <dd class="nu">{{ xof(data?.platform.commissionPreviousMonth) }} F</dd>
-                        <dt>Encaissé en ligne</dt>
-                        <dd class="nu">{{ xof(data?.platform.onlineCollectedThisMonth) }} F</dd>
-                        <dt>Encaissé au guichet</dt>
-                        <dd class="nu">
-                            {{ xof((data?.summary.collectedThisMonth ?? 0)
-                                - (data?.platform.onlineCollectedThisMonth ?? 0)) }} F
-                        </dd>
-                        <dt>Reçus émis</dt>
-                        <dd class="nu">{{ data?.summary.receiptsThisMonth ?? 0 }}</dd>
-                    </dl>
-                    <!-- Le guichet ne rapporte rien : le rappeler ici évite de lire la commission
-                         comme un pourcentage de la ligne du dessus. -->
-                    <p class="px-4 pb-4 text-[12px] leading-relaxed" style="color: var(--text-faint)">
-                        Seuls les paiements en ligne produisent une commission. Les règlements
-                        reçus au guichet par les écoles n'en supportent aucune.
-                    </p>
-                </UiCard>
-
-                <UiCard
-                    style="grid-column: span 12" :pad="false"
-                    title="Écoles du parc"
-                    sub="Effectif, encaissements du mois et impayés, école par école"
-                >
-                    <template #action>
-                        <NuxtLink to="/app/etablissements" class="btn-secondary btn-sm">
-                            Gérer les partenaires
-                        </NuxtLink>
-                    </template>
-
-                    <div class="tbar">
-                        <label class="inp" style="flex: 0 1 280px">
-                            <svg
-                                class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none"
-                                stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                            >
-                                <circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" />
-                            </svg>
-                            <input
-                                v-model="keyword" type="search" class="w-full"
-                                placeholder="Rechercher une école…" aria-label="Rechercher une école"
-                            />
-                        </label>
-                        <button class="chip" :aria-pressed="filter === 'all'" @click="filter = 'all'">
-                            Toutes
-                        </button>
-                        <button class="chip" :aria-pressed="filter === 'overdue'" @click="filter = 'overdue'">
-                            Avec impayés
-                        </button>
-                        <button class="chip" :aria-pressed="filter === 'idle'" @click="filter = 'idle'">
-                            Sans encaissement ce mois
-                        </button>
-                    </div>
-
-                    <div class="table-wrap" style="border: 0; box-shadow: none; border-radius: 0">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>Établissement</th>
-                                    <th class="text-right">Élèves</th>
-                                    <th class="text-right">Encaissé ce mois</th>
-                                    <th class="text-right">Commission</th>
-                                    <th class="text-right">Impayés</th>
-                                    <th>État</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="school in schools" :key="school.id">
-                                    <td>
-                                        <div class="flex items-center gap-2.5">
-                                            <AvatarBadge :name="school.name" :size="30" />
-                                            <div class="nm min-w-0">
-                                                <b>{{ school.name }}</b>
-                                                <span>
-                                                    {{ school.overdueCount }}
-                                                    échéance{{ school.overdueCount > 1 ? 's' : '' }} en retard
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td class="num" style="color: var(--navy)">{{ school.studentCount }}</td>
-                                    <td class="num" style="color: var(--navy)">
-                                        {{ xof(school.collectedThisMonth) }} F
-                                    </td>
-                                    <td class="num" style="color: var(--success)">
-                                        {{ xof(school.commissionThisMonth) }} F
-                                    </td>
-                                    <td class="num" :style="school.overdueAmount > 0
-                                        ? 'color: var(--danger)' : 'color: var(--text-faint)'">
-                                        {{ xof(school.overdueAmount) }} F
-                                    </td>
-                                    <td>
-                                        <UiPill :tone="school.active ? 'ok' : 'mute'">
-                                            {{ school.active ? 'Active' : 'Désactivée' }}
-                                        </UiPill>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <EmptyState
-                        v-if="!schools.length && (keyword || filter !== 'all')"
-                        title="Aucun résultat"
-                        text="Aucune école du parc ne correspond à ce filtre."
-                    />
-                    <EmptyState
-                        v-else-if="!schools.length"
-                        title="Aucune école cliente"
-                        text="Créez un premier partenaire : son établissement et son compte de direction sont générés ensemble."
-                    />
-
-                    <template #footer>
-                        <span class="text-[12px]" style="color: var(--text-faint)">
-                            <b class="nu" style="color: var(--navy)">{{ schools.length }}</b>
-                            école{{ schools.length > 1 ? 's' : '' }} affichée{{ schools.length > 1 ? 's' : '' }}
-                        </span>
-                        <span class="text-[12px]" style="color: var(--text-faint)">
-                            Commission cumulée
-                            <b class="nu" style="color: var(--success)">
-                                {{ xof(schools.reduce((sum, s) => sum + (s.commissionThisMonth ?? 0), 0)) }} F
+            <UiCard
+                class="c4" :pad="false"
+                title="Répartition par formule" :sub="`${fm(billedTotal)} FCFA facturés en ${year}`"
+                tip="Part de chaque palier dans le revenu récurrent, sur les montants figés à l'émission : changer un tarif ne réécrit pas ce qui a déjà été facturé."
+            >
+                <EmptyState
+                    v-if="!byPlan.length"
+                    title="Rien de facturé"
+                    text="Renseignez la formule des écoles : leurs périodes apparaîtront dans Facturation."
+                />
+                <div v-else class="p-4 flex flex-col gap-3.5">
+                    <div v-for="entry in byPlan" :key="entry.plan">
+                        <div class="flex items-baseline justify-between mb-1.5">
+                            <b class="text-[12.5px] font-bold" :style="{ color: PLAN_TONES[entry.plan] }">
+                                {{ entry.label }} · {{ entry.count }} école(s)
                             </b>
+                            <span class="nu text-[12.5px]" style="color: var(--navy)">
+                                {{ fm(entry.amount) }} F
+                            </span>
+                        </div>
+                        <div class="h-2 rounded-full overflow-hidden" style="background: var(--surface-sunken)">
+                            <div
+                                class="h-full rounded-full"
+                                :style="{ width: `${entry.share}%`, background: PLAN_TONES[entry.plan] }"
+                            />
+                        </div>
+                        <span class="text-[11.5px]" style="color: var(--text-faint)">
+                            {{ entry.share.toFixed(0) }} % du revenu récurrent
                         </span>
-                    </template>
-                </UiCard>
-            </div>
-        </template>
+                    </div>
+                </div>
+            </UiCard>
+        </div>
+
+        <div class="grid-12">
+            <UiCard
+                class="c7" :pad="false"
+                title="Écoles à surveiller" :sub="`Recouvrement sous ${SEUIL_SURVEILLANCE} % ce mois`"
+                tip="Encaissé rapporté à l'attendu de l'échéancier. Un recouvrement durablement bas fragilise l'école, et finit par fragiliser son abonnement."
+            >
+                <template #action>
+                    <NuxtLink to="/app/etablissements" class="btn-secondary btn-sm">
+                        Toutes les écoles
+                    </NuxtLink>
+                </template>
+
+                <div
+                    v-if="pending || watchlist.length" class="table-wrap"
+                    style="border: 0; box-shadow: none; border-radius: 0"
+                >
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>École</th>
+                                <th>Formule</th>
+                                <th class="r">Recouvrement</th>
+                                <th class="r">Impayés</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <TableSkeleton v-if="pending" :columns="5" />
+                            <tr
+                                v-for="row in watchlist" v-else :key="row.school.id" class="cl"
+                                @click="openSchool(row.school.id)"
+                            >
+                                <td>
+                                    <div class="flex items-center gap-2.5">
+                                        <AvatarBadge :name="row.school.name" :size="28" />
+                                        <div class="nm min-w-0">
+                                            <b>{{ row.school.name }}</b>
+                                            <span>{{ row.school.studentCount }} élève(s)</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span
+                                        v-if="row.school.subscriptionPlan" class="tag"
+                                        :style="{ color: PLAN_TONES[row.school.subscriptionPlan] }"
+                                    >{{ PLAN_LABELS[row.school.subscriptionPlan] }}</span>
+                                    <span v-else class="text-[12px]" style="color: var(--warning)">
+                                        à définir
+                                    </span>
+                                </td>
+                                <td class="r">
+                                    <div class="flex items-center gap-2.5 justify-end">
+                                        <div
+                                            class="h-1.5 w-16 rounded-full overflow-hidden"
+                                            style="background: var(--surface-sunken)"
+                                        >
+                                            <div
+                                                class="h-full rounded-full"
+                                                :style="{ width: `${Math.min(100, row.rate)}%`,
+                                                          background: 'var(--warning-solid)' }"
+                                            />
+                                        </div>
+                                        <b class="nu text-[12px]" style="color: var(--warning)">
+                                            {{ row.rate.toFixed(0) }} %
+                                        </b>
+                                    </div>
+                                </td>
+                                <td class="num" style="color: var(--danger)">
+                                    {{ fm(row.school.overdueAmount) }} F
+                                </td>
+                                <td class="text-right">
+                                    <BoIcon name="chevron-right" :size="16" style="color: var(--text-faint)" />
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <EmptyState
+                    v-if="!pending && !watchlist.length"
+                    title="Aucun compte à surveiller"
+                    text="Aucune école du parc ne décroche sur son recouvrement ce mois-ci."
+                />
+            </UiCard>
+
+            <UiCard
+                class="c5" :pad="false"
+                title="Activité du parc" sub="Souscriptions, émissions et règlements"
+                tip="Des faits datés, relus depuis les contrats et les factures. Rien n'est journalisé pour cet écran."
+            >
+                <EmptyState
+                    v-if="!activity.length"
+                    title="Aucune activité"
+                    text="Les souscriptions et les factures d'abonnement apparaîtront ici."
+                />
+                <div v-else class="lst">
+                    <button
+                        v-for="(event, index) in activity" :key="index"
+                        class="flex items-center gap-2.5 w-full text-left"
+                        @click="event.school && openSchool(event.school)"
+                    >
+                        <span
+                            class="w-8 h-8 rounded-[10px] grid place-items-center shrink-0"
+                            :style="{ color: event.tone,
+                                       background: `color-mix(in srgb, ${event.tone} 12%, transparent)` }"
+                        >
+                            <BoIcon :name="event.icon" :size="16" />
+                        </span>
+                        <div class="nm flex-1 min-w-0">
+                            <b>{{ event.label }}</b>
+                            <span>{{ event.detail }}</span>
+                        </div>
+                        <span class="text-[11px] font-semibold shrink-0" style="color: var(--text-faint)">
+                            {{ day(event.at) }}
+                        </span>
+                    </button>
+                </div>
+            </UiCard>
+        </div>
     </div>
 </template>

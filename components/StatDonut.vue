@@ -10,6 +10,8 @@ const props = withDefaults(defineProps<{
     size?: number;
     stroke?: number;
     tone?: string;
+    /** Remplace le pourcentage au centre. Sert à dire « rien à mesurer » sans afficher 0 %. */
+    label?: string;
 }>(), { size: 64, stroke: 8, tone: 'var(--success-solid)' });
 
 const radius = computed(() => (props.size - props.stroke) / 2);
@@ -35,6 +37,6 @@ const offset = computed(() => circumference.value * (1 - clamped.value / 100));
         <text
             :x="size / 2" :y="size / 2" text-anchor="middle" dominant-baseline="central"
             style="font: 800 13px Nunito, sans-serif; fill: var(--navy)"
-        >{{ Math.round(clamped) }}%</text>
+        >{{ label ?? `${Math.round(clamped)}%` }}</text>
     </svg>
 </template>
