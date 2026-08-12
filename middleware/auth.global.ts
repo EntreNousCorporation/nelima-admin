@@ -1,6 +1,16 @@
 import { useAuthStore } from '~/stores/auth';
 
+/** Ouvertes à qui n'est pas connecté, mais fermées à qui l'est : il n'a rien à y faire. */
 const PUBLIC_ROUTES = new Set(['/connexion']);
+
+/**
+ * Ouvertes à tout le monde, connecté ou non.
+ *
+ * <p>Le parcours de mot de passe ne se laisse pas rediriger : un membre de l'équipe déjà connecté
+ * peut ouvrir un lien reçu pour un autre compte. Le renvoyer vers `/app` lui ferait manquer
+ * l'écran, et le lien expirerait sans qu'il comprenne pourquoi.
+ */
+const OPEN_ROUTES = new Set(['/connexion/reset', '/connexion/oubli']);
 
 export default defineNuxtRouteMiddleware(async (to) => {
     const auth = useAuthStore();
@@ -21,6 +31,9 @@ export default defineNuxtRouteMiddleware(async (to) => {
         }
     }
 
+    if (OPEN_ROUTES.has(to.path)) {
+        return;
+    }
     if (PUBLIC_ROUTES.has(to.path)) {
         return auth.isAuthenticated ? navigateTo('/app') : undefined;
     }

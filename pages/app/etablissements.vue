@@ -21,7 +21,8 @@ type EstablishmentDetail = Establishment & {
     /** L'`id` du contact est indispensable : c'est par lui que le PUT met à jour l'existant au lieu
      *  d'en créer un doublon (contrainte d'unicité applicative sur le contact). */
     contacts?: { id?: string; type: string; value: string; isPrimary?: boolean }[];
-    principal?: { firstName?: string; lastName?: string };
+    /** L'`id` sert au renvoi du lien d'activation : c'est ce compte-là qui l'a reçu. */
+    principal?: { id?: string; firstName?: string; lastName?: string };
 };
 
 /** Agrégats servis par la console : effectif, encaissements du mois, impayés. */
@@ -62,6 +63,32 @@ const principal = computed(() => {
     if (!person) return null;
     return [person.firstName, person.lastName].filter(Boolean).join(' ') || null;
 });
+/**
+ * Renvoi du courriel de bienvenue et de son lien de définition de mot de passe.
+ *
+ * <p>Le premier courriel se perd — filtre anti-pourriel, adresse mal saisie, lien laissé expirer.
+ * Sans ce bouton, la seule issue était de supprimer l'établissement et de le recréer.
+ */
+const resending = ref(false);
+const resendMessage = ref('');
+
+async function resendActivation() {
+    const school = opened.value;
+    const userId = openedDetail.value?.principal?.id;
+    if (!school || !userId) return;
+
+    resending.value = true;
+    resendMessage.value = '';
+    try {
+        await api(`/establishments/${school.id}/users/${userId}/resend-activation`, { method: 'POST' });
+        resendMessage.value = 'Lien renvoyé. Le précédent ne vaut plus.';
+    } catch {
+        resendMessage.value = "Le renvoi a échoué. Réessayez dans un instant.";
+    } finally {
+        resending.value = false;
+    }
+}
+
 const planDraft = ref<SubscriptionPlan | ''>('');
 const subscribedAtDraft = ref('');
 const cityDraft = ref('');
@@ -921,7 +948,20 @@ onMounted(async () => {
             <p class="sec">Contact</p>
             <dl class="kv mb-5">
                 <dt>Direction</dt>
-                <dd>{{ principal ?? '—' }}</dd>
+                <dd>
+                    {{ principal ?? '—' }}
+                    <button
+                        v-if="openedDetail?.principal?.id"
+                        type="button" class="btn-ghost btn-sm ml-2"
+                        :disabled="resending" @click="resendActivation"
+                    >
+                        {{ resending ? 'Envoi…' : 'Renvoyer le lien' }}
+                    </button>
+                    <span
+                        v-if="resendMessage"
+                        class="block mt-1 text-xs" style="color: var(--text-faint)"
+                    >{{ resendMessage }}</span>
+                </dd>
                 <dt>Téléphone</dt>
                 <dd>
                     <a v-if="contactPhone" :href="`tel:${contactPhone}`">{{ contactPhone }}</a>

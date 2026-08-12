@@ -88,6 +88,12 @@ async function submit() {
                         {{ submitting ? 'Connexion…' : 'Se connecter' }}
                     </button>
                 </div>
+
+                <p class="mt-6 text-sm">
+                    <NuxtLink to="/connexion/oubli" style="color: var(--brand-700)">
+                        Mot de passe oublié ?
+                    </NuxtLink>
+                </p>
             </form>
         </main>
     </div>

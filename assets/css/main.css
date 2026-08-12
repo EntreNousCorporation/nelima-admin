@@ -300,6 +300,25 @@
         color: var(--text);
     }
 
+    /* L'astérisque des champs obligatoires, posée par le contrôle et non à la main.
+
+       Le libellé et son contrôle sont frères immédiats partout : la marque suit donc l'attribut
+       `required`, qui est déjà la source de vérité — c'est lui qui déclenche la validation du
+       navigateur, et il se calque sur les `@NotBlank` du serveur. Une astérisque écrite dans le
+       texte du libellé aurait pu mentir ; celle-ci ne le peut pas.
+
+       `field-label--required` reste disponible pour les contrôles composés, où le libellé n'est
+       pas suivi directement de son champ. */
+    .field-label:has(+ input:required),
+    .field-label:has(+ select:required),
+    .field-label:has(+ textarea:required),
+    .field-label--required {
+        &::after {
+            content: " *";
+            color: var(--danger);
+        }
+    }
+
     .input,
     .select {
         @apply w-full h-10 px-3 text-sm outline-none transition-shadow;
