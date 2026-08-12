@@ -43,9 +43,12 @@ async function submit() {
 </script>
 
 <template>
-    <main class="min-h-screen flex items-center justify-center p-6">
+    <div class="min-h-screen grid lg:grid-cols-2">
+        <AuthAside />
+
+        <main class="flex items-center justify-center p-6">
         <div class="w-full max-w-sm">
-            <div class="flex items-center gap-3 mb-8">
+            <div class="lg:hidden flex items-center gap-3 mb-8">
                 <NelimaMark :size="32" />
                 <span class="text-lg font-semibold">Nelima</span>
             </div>
@@ -72,7 +75,7 @@ async function submit() {
                 </NuxtLink>
             </template>
 
-            <form v-else @submit.prevent="submit">
+            <form v-else class="form-auth" @submit.prevent="submit">
                 <h1 class="text-2xl font-semibold tracking-tight">Définir votre mot de passe</h1>
                 <p class="page-subtitle mb-8">
                     Pour le compte <strong>{{ username }}</strong>.
@@ -122,5 +125,6 @@ async function submit() {
                 </p>
             </form>
         </div>
-    </main>
+        </main>
+    </div>
 </template>

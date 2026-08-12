@@ -308,15 +308,25 @@
        texte du libellé aurait pu mentir ; celle-ci ne le peut pas.
 
        `field-label--required` reste disponible pour les contrôles composés, où le libellé n'est
-       pas suivi directement de son champ. */
-    .field-label:has(+ input:required),
-    .field-label:has(+ select:required),
-    .field-label:has(+ textarea:required),
+       pas suivi directement de son champ.
+
+       `:where()` enveloppe la condition pour la rendre **sans poids** : un `:has(+ input:required)`
+       nu pèse plus lourd qu'une classe, et l'exception ci-dessous ne pouvait alors pas l'annuler. */
+    .field-label:where(:has(+ input:required), :has(+ select:required), :has(+ textarea:required)),
     .field-label--required {
         &::after {
             content: " *";
             color: var(--danger);
         }
+    }
+
+    /* Les écrans d'authentification n'en portent pas.
+
+       Une astérisque distingue l'obligatoire du facultatif ; là où tout est obligatoire et où
+       personne n'en doute — identifiant, mot de passe, confirmation —, elle ne distingue rien et
+       ne fait qu'encombrer. */
+    .form-auth .field-label::after {
+        content: none;
     }
 
     .input,
