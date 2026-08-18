@@ -5,7 +5,7 @@
  * liste croise des familles qui n'appartiennent pas au même établissement. Le portail établissement,
  * lui, ne voit jamais que ses propres parents.
  */
-export type ContactType = 'EMAIL' | 'PHONE';
+export type ContactType = 'EMAIL' | 'PHONE_NUMBER';
 
 export type ParentContact = {
     id: string;

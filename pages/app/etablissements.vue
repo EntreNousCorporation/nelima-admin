@@ -9,6 +9,7 @@ type Establishment = {
     id: string;
     name: string;
     webSite?: string;
+    city?: string;
     active?: boolean;
     /** Antennes rattachées. L'établissement principal compte pour un site, elles s'y ajoutent. */
     subsidiaries?: unknown[];
@@ -38,7 +39,6 @@ type SchoolRow = {
     overdueCount: number;
     expectedThisMonth: number;
     collectedPreviousMonth: number;
-    city?: string;
 };
 
 const api = useApi();
@@ -108,8 +108,13 @@ const savingSchool = ref(false);
  *
  * <p>On le retrouve pour réutiliser son `id` au moment d'enregistrer : c'est ce qui distingue une
  * mise à jour d'une création, et évite le doublon que la contrainte d'unicité applicative refuse.
+ *
+ * <p>Le type est `PHONE_NUMBER`, jamais `PHONE` : c'est le nom de la valeur d'énumération côté
+ * serveur. Écrit `PHONE`, il ne correspondait à aucun contact en lecture — le téléphone restait
+ * vide sans rien signaler — et faisait échouer l'enregistrement, Jackson refusant une valeur
+ * d'énumération inconnue par un 400 « La requête est mal formée. ».
  */
-function primaryContact(type: 'EMAIL' | 'PHONE') {
+function primaryContact(type: 'EMAIL' | 'PHONE_NUMBER') {
     const contacts = openedDetail.value?.contacts ?? [];
     return contacts.find((contact) => contact.type === type && contact.isPrimary)
         ?? contacts.find((contact) => contact.type === type);
@@ -154,7 +159,7 @@ const currentPlan = computed(() =>
     plans.value.find((entry) => entry.plan === statOf(opened.value?.id ?? '').subscriptionPlan) ?? null);
 
 const contactPhone = computed(() => openedDetail.value?.contacts
-    ?.find((contact) => contact.type === 'PHONE')?.value);
+    ?.find((contact) => contact.type === 'PHONE_NUMBER')?.value);
 
 const shortMonth = new Date().toLocaleDateString('fr-FR', { month: 'long' });
 
@@ -209,7 +214,6 @@ function cancelEdit() {
 function resetDrafts(id: string) {
     planDraft.value = statOf(id).subscriptionPlan ?? '';
     subscribedAtDraft.value = statOf(id).subscribedAt ?? new Date().toISOString().slice(0, 10);
-    cityDraft.value = statOf(id).city ?? '';
     resetSchoolDrafts();
 }
 
@@ -218,15 +222,17 @@ function resetDrafts(id: string) {
  *
  * <p>À l'ouverture, le détail n'est pas encore arrivé : la liste amorce ce qu'elle sait (nom, site,
  * ville), et cet appel est rejoué une fois le détail chargé pour compléter nom court, agrément et
- * contacts. La ville, elle, reste servie par la liste, source déjà lue partout ailleurs.
+ * contacts. La ville venait du tableau de bord du parc, faute d'être servie par la fiche ; elle
+ * l'est depuis, et se lit là où on la modifie.
  */
 function resetSchoolDrafts() {
     const detail = openedDetail.value;
     nameDraft.value = detail?.name ?? opened.value?.name ?? '';
+    cityDraft.value = detail?.city ?? opened.value?.city ?? '';
     shortNameDraft.value = detail?.shortName ?? '';
     accreditationDraft.value = detail?.accreditationNumber ?? '';
     webSiteDraft.value = detail?.webSite ?? opened.value?.webSite ?? '';
-    phoneDraft.value = primaryContact('PHONE')?.value ?? '';
+    phoneDraft.value = primaryContact('PHONE_NUMBER')?.value ?? '';
     emailDraft.value = primaryContact('EMAIL')?.value ?? '';
 }
 
@@ -284,15 +290,15 @@ async function saveSchool() {
     error.value = '';
     try {
         const contacts: {
-            id?: string; value: string; type: 'EMAIL' | 'PHONE'; isPrimary?: boolean;
+            id?: string; value: string; type: 'EMAIL' | 'PHONE_NUMBER'; isPrimary?: boolean;
         }[] = [];
-        const phone = primaryContact('PHONE');
+        const phone = primaryContact('PHONE_NUMBER');
         const email = primaryContact('EMAIL');
         if (phoneDraft.value.trim()) {
             contacts.push({
                 id: phone?.id,
                 value: phoneDraft.value.trim(),
-                type: 'PHONE',
+                type: 'PHONE_NUMBER',
                 isPrimary: phone?.isPrimary ?? true,
             });
         }
@@ -351,7 +357,7 @@ function sitesLabel(row: Establishment) {
  * cliente depuis septembre 2022 suffit — le quantième n'apprend rien et allonge la ligne.
  */
 function rowSub(row: Establishment) {
-    const parts = [statOf(row.id).city, sitesLabel(row)].filter(Boolean);
+    const parts = [row.city, sitesLabel(row)].filter(Boolean);
     const since = statOf(row.id).subscribedAt;
     parts.push(since ? `client depuis ${month(since)}` : 'sans abonnement');
     return parts.join(' · ');
@@ -543,11 +549,8 @@ onMounted(async () => {
                         />
                     </div>
                     <div>
-                        <label class="field-label" for="newCity">Ville</label>
-                        <input
-                            id="newCity" v-model="form.city" type="text" required
-                            placeholder="Abidjan, San-Pédro…" class="input"
-                        />
+                        <label class="field-label field-label--required" for="newCity">Ville</label>
+                        <CitySelect id="newCity" v-model="form.city" required />
                     </div>
                     <div>
                         <label class="field-label" for="contactEmail">Email de contact</label>
@@ -868,10 +871,7 @@ onMounted(async () => {
                     </div>
                     <div>
                         <label class="field-label" for="schoolCity">Ville</label>
-                        <input
-                            id="schoolCity" v-model="cityDraft" type="text" class="input"
-                            placeholder="Abidjan, San-Pédro…"
-                        />
+                        <CitySelect id="schoolCity" v-model="cityDraft" />
                         <p class="text-[12px] mt-1" style="color: var(--text-faint)">
                             Elle situe l'école dans les listes, et reste distincte de l'adresse postale.
                         </p>
@@ -973,7 +973,7 @@ onMounted(async () => {
                     <span v-else style="color: var(--text-faint)">—</span>
                 </dd>
                 <dt>Ville</dt>
-                <dd>{{ statOf(opened.id).city ?? '—' }}</dd>
+                <dd>{{ openedDetail?.city ?? opened.city ?? '—' }}</dd>
                 <dt>Sites ouverts</dt>
                 <dd class="nu">{{ sites(opened) }}</dd>
                 <dt>Site web</dt>

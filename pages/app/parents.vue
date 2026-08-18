@@ -182,7 +182,7 @@ onMounted(() => {
                             <td>
                                 <template v-if="primaryContact(parent)">
                                     <a
-                                        v-if="primaryContact(parent)!.type === 'PHONE'"
+                                        v-if="primaryContact(parent)!.type === 'PHONE_NUMBER'"
                                         :href="`tel:${primaryContact(parent)!.value}`"
                                         class="flex items-center gap-2"
                                     >
