@@ -81,6 +81,46 @@ async function remove(year: AcademicYear) {
 
 const day = (value: string) => value.split('-').reverse().join('/');
 
+/* ---- Écoles d'une année, et réouverture ---- */
+type SchoolState = { establishmentId: string; name: string; status: 'OPEN' | 'CLOSED'; closedAt?: string | null; closedBy?: string | null };
+const openedYear = ref<string | null>(null);
+const schools = ref<SchoolState[]>([]);
+const schoolsLoading = ref(false);
+/** École dont la réouverture attend confirmation : rouvrir des comptes clôturés n'est pas anodin. */
+const confirming = ref<string | null>(null);
+
+async function toggleSchools(year: AcademicYear) {
+    if (openedYear.value === year.id) {
+        openedYear.value = null;
+        return;
+    }
+    openedYear.value = year.id;
+    confirming.value = null;
+    await loadSchools(year.id);
+}
+
+async function loadSchools(yearId: string) {
+    schoolsLoading.value = true;
+    try {
+        schools.value = await api<SchoolState[]>(`/academic-years/${yearId}/schools`);
+    } catch (e: any) {
+        error.value = e?.data?.debugMessage ?? "Les écoles n'ont pas pu être chargées.";
+    } finally {
+        schoolsLoading.value = false;
+    }
+}
+
+async function reopen(yearId: string, school: SchoolState) {
+    error.value = '';
+    try {
+        await api(`/academic-years/${yearId}/schools/${school.establishmentId}/reopen`, { method: 'POST' });
+        confirming.value = null;
+        await loadSchools(yearId);
+    } catch (e: any) {
+        error.value = e?.data?.debugMessage ?? "L'année n'a pas pu être rouverte.";
+    }
+}
+
 onMounted(load);
 </script>
 
@@ -133,16 +173,55 @@ onMounted(load);
             </thead>
             <tbody>
                 <TableSkeleton v-if="loading" :columns="5" />
-                <tr v-for="year in years" v-else :key="year.id">
-                    <td><b>{{ year.label }}</b></td>
-                    <td>{{ day(year.startDate) }}</td>
-                    <td>{{ day(year.endDate) }}</td>
-                    <td><UiPill :tone="year.active ? 'ok' : 'mute'">{{ year.active ? 'En cours' : '—' }}</UiPill></td>
-                    <td class="text-right">
-                        <button class="btn-ghost btn-sm" @click="openEdit(year)">Modifier</button>
-                        <button v-if="!year.active" class="btn-ghost btn-sm" @click="remove(year)">Supprimer</button>
-                    </td>
-                </tr>
+                <template v-for="year in years" v-else :key="year.id">
+                    <tr>
+                        <td><b>{{ year.label }}</b></td>
+                        <td>{{ day(year.startDate) }}</td>
+                        <td>{{ day(year.endDate) }}</td>
+                        <td><UiPill :tone="year.active ? 'ok' : 'mute'">{{ year.active ? 'En cours' : '—' }}</UiPill></td>
+                        <td class="text-right">
+                            <button class="btn-ghost btn-sm" @click="toggleSchools(year)">
+                                {{ openedYear === year.id ? 'Masquer les écoles' : 'Écoles' }}
+                            </button>
+                            <button class="btn-ghost btn-sm" @click="openEdit(year)">Modifier</button>
+                            <button v-if="!year.active" class="btn-ghost btn-sm" @click="remove(year)">Supprimer</button>
+                        </td>
+                    </tr>
+                    <tr v-if="openedYear === year.id">
+                        <td colspan="5" style="background: var(--surface-sunken)">
+                            <p v-if="schoolsLoading" class="text-[12.5px]">Chargement…</p>
+                            <p v-else-if="!schools.length" class="text-[12.5px]" style="color: var(--text-faint)">
+                                Aucune école n'a encore travaillé sur cette année.
+                            </p>
+                            <div
+                                v-for="school in schools" v-else :key="school.establishmentId"
+                                class="flex flex-wrap items-center gap-2 py-1.5"
+                            >
+                                <b class="text-[12.5px] flex-1">{{ school.name }}</b>
+                                <UiPill :tone="school.status === 'CLOSED' ? 'mute' : 'ok'">
+                                    {{ school.status === 'CLOSED' ? 'Clôturée' : 'Ouverte' }}
+                                </UiPill>
+                                <span v-if="school.status === 'CLOSED'" class="text-[11.5px]" style="color: var(--text-faint)">
+                                    le {{ school.closedAt ? new Date(school.closedAt).toLocaleDateString('fr-FR') : '—' }}
+                                    <template v-if="school.closedBy"> par {{ school.closedBy }}</template>
+                                </span>
+                                <template v-if="school.status === 'CLOSED'">
+                                    <button
+                                        v-if="confirming !== school.establishmentId" class="btn-secondary btn-sm"
+                                        @click="confirming = school.establishmentId"
+                                    >Rouvrir</button>
+                                    <template v-else>
+                                        <span class="text-[12px] font-semibold" style="color: var(--danger)">
+                                            L'école pourra de nouveau modifier {{ year.label }}.
+                                        </span>
+                                        <button class="btn-primary btn-sm" @click="reopen(year.id, school)">Confirmer</button>
+                                        <button class="btn-ghost btn-sm" @click="confirming = null">Annuler</button>
+                                    </template>
+                                </template>
+                            </div>
+                        </td>
+                    </tr>
+                </template>
             </tbody>
         </table>
     </UiCard>
