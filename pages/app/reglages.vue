@@ -103,10 +103,12 @@ onMounted(async () => {
     <div>
         <PageHead
             title="Réglages de la console"
-            sub="Agrégateur de paiement et commission YPYit"
+            sub="Années scolaires, agrégateur de paiement et commission YPYit"
         />
 
         <p v-if="error" class="alert-danger mb-3.5" role="alert">{{ error }}</p>
+
+        <AcademicYearsCard class="mb-3.5" />
 
         <div class="grid-12">
             <UiCard
