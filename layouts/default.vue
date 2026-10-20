@@ -15,6 +15,7 @@ const route = useRoute();
 const tabs = [
     { label: 'Parc clients', to: '/app', icon: 'chart-bar' },
     { label: 'Écoles', to: '/app/etablissements', icon: 'building' },
+    { label: 'Groupes', to: '/app/groupes', icon: 'layers' },
     { label: 'Parents', to: '/app/parents', icon: 'user' },
     { label: 'Facturation', to: '/app/facturation', icon: 'receipt' },
     { label: 'Encaissements', to: '/app/encaissements', icon: 'cash' },
