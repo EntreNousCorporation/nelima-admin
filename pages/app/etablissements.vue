@@ -11,6 +11,8 @@ type Establishment = {
     webSite?: string;
     city?: string;
     active?: boolean;
+    /** Logo déposé par l'école, s'il y en a un. */
+    logo?: string | null;
     /** Antennes rattachées. L'établissement principal compte pour un site, elles s'y ajoutent. */
     subsidiaries?: unknown[];
 };
@@ -649,7 +651,7 @@ onMounted(async () => {
                         <tr v-for="row in filtered" v-else :key="row.id" class="cl" @click="openSchool(row)">
                             <td>
                                 <div class="flex items-center gap-2.5">
-                                    <AvatarBadge :name="row.name" :size="30" />
+                                    <AvatarBadge :name="row.name" :src="row.logo" :size="30" />
                                     <div class="nm min-w-0">
                                         <b>{{ row.name }}</b>
                                         <span>{{ rowSub(row) }}</span>
@@ -744,7 +746,7 @@ onMounted(async () => {
             @close="opened = null"
         >
             <template #avatar>
-                <AvatarBadge :name="opened.name" :size="44" />
+                <AvatarBadge :name="opened.name" :src="(opened as any).logo" :size="44" />
             </template>
 
             <div class="flex gap-2 flex-wrap mb-4">

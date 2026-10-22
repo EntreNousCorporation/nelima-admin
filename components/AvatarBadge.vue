@@ -20,6 +20,8 @@ const props = withDefaults(
          * Par défaut, la teinte se déduit du nom.
          */
         tone?: string;
+        /** Image (logo d'école) ; sans elle, ou si elle ne se charge pas, les initiales. */
+        src?: string | null;
     }>(),
     { size: 30 },
 );
@@ -31,6 +33,10 @@ const TONES = [
 ];
 
 const muted = computed(() => props.tone === 'mute');
+
+const failed = ref(false);
+watch(() => props.src, () => { failed.value = false; });
+const showImage = computed(() => !!props.src && !failed.value);
 
 const initials = computed(() => (props.name ?? '').split(' ').filter(Boolean).slice(0, 2)
     .map((part) => part[0]?.toUpperCase()).join('') || '—');
@@ -55,5 +61,8 @@ const style = computed(() => ({
 </script>
 
 <template>
-    <span class="avatar" :style="style">{{ initials }}</span>
+    <span v-if="showImage" class="avatar" :style="{ ...style, background: '#fff', border: '1px solid var(--border)', overflow: 'hidden' }">
+        <img :src="src!" alt="" style="width: 100%; height: 100%; object-fit: contain" @error="failed = true" />
+    </span>
+    <span v-else class="avatar" :style="style">{{ initials }}</span>
 </template>
