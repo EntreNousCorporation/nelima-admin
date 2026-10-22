@@ -1,5 +1,5 @@
 <script setup lang="ts">
-definePageMeta({ layout: 'default' });
+definePageMeta({ layout: 'auth' });
 
 /**
  * Demande d'un nouveau lien de mot de passe.

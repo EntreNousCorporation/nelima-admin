@@ -1,5 +1,5 @@
 <script setup lang="ts">
-definePageMeta({ layout: 'default' });
+definePageMeta({ layout: 'auth' });
 
 /**
  * Définition du mot de passe depuis le lien reçu par courriel.

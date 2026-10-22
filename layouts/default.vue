@@ -89,8 +89,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
 async function logout() {
     accountOpen.value = false;
     await $fetch('/api/auth/logout', { method: 'POST' });
-    auth.clear();
-    await navigateTo('/connexion');
+    // Rechargement complet plutôt que navigation : vider la session avant de quitter la page
+    // affichait un instant l'écran courant sans son cadre, et le rechargement efface tout ce que
+    // l'application gardait en mémoire du compte (permissions, site consulté) : inutile de la vider
+    // avant, ce qui redessinerait justement la page sans son cadre.
+    window.location.assign('/connexion');
 }
 </script>
 
