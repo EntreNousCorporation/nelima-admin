@@ -52,6 +52,11 @@ export default defineNuxtConfig({
             // Police servie par CDN : le paquet `@fontsource` utilise `import.meta` d'une façon
             // que le scan SSR de Vite ne sait pas transpiler et casse le build.
             link: [
+                // Icône d'onglet : la marque Nelima de l'application mobile. Le SVG pour les
+                // navigateurs récents, l'ICO en repli, et une version pleine pour l'écran d'accueil iOS.
+                { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+                { rel: 'icon', href: '/favicon.ico', sizes: '48x48' },
+                { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
                 { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
                 { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
                 {
