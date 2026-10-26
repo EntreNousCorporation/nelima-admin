@@ -9,6 +9,9 @@ set -euo pipefail
 
 REMOTE="${REMOTE:-nelima}"
 REMOTE_DIR="${REMOTE_DIR:-~/deployment}"
+# Adresse publique vérifiée en fin de déploiement : celle de l'environnement visé.
+# Staging : REMOTE=nelima-stg PUBLIC_URL=https://admin-stg.nelima.ci ./deploy.sh
+PUBLIC_URL="${PUBLIC_URL:-https://admin.nelima.ci}"
 
 # Une connexion morte sans signe de vie laissait ssh attendre indéfiniment, au point de bloquer
 # un déploiement pendant des heures : elle est déclarée perdue après une minute de silence, et
@@ -42,4 +45,4 @@ ssh "$REMOTE" "cd $REMOTE_DIR && docker compose build backoffice && docker compo
 
 echo "==> Vérification externe"
 sleep 5
-curl -s -o /dev/null -w "connexion HTTP %{http_code}\n" --max-time 30 https://admin.nelima.ci/connexion
+curl -s -o /dev/null -w "connexion HTTP %{http_code}\n" --max-time 30 "$PUBLIC_URL/connexion"
